@@ -1,0 +1,129 @@
+[tools]
+node = "latest"
+
+[env]
+_.file = ".env"
+
+# ---------------------------------------------------------------------------
+# Development
+# ---------------------------------------------------------------------------
+
+[tasks.install]
+description = "Instala as dependências do projeto"
+run = "npm install"
+
+[tasks.dev]
+description = "Sobe o servidor de desenvolvimento em http://localhost:3000"
+run = "npm run dev"
+
+[tasks.build]
+description = "Build de produção"
+run = "npm run build"
+
+[tasks.start]
+description = "Roda o build de produção localmente"
+depends = ["build"]
+run = "npm run start"
+
+# ---------------------------------------------------------------------------
+# Qualidade
+# ---------------------------------------------------------------------------
+
+[tasks.typecheck]
+description = "Checagem de tipos (tsc --noEmit)"
+run = "npm run typecheck"
+
+[tasks.lint]
+description = "ESLint"
+run = "npm run lint"
+
+[tasks.check]
+description = "Typecheck + lint + build (sequencial)"
+# Deliberately NOT `depends`: mise resolves dependencies in parallel and the
+# build rewrites .next/types while tsc is still reading it.
+run = [
+  "npm run typecheck",
+  "npm run lint",
+  "npm run build",
+  "echo 'Tudo certo.'",
+]
+
+# ---------------------------------------------------------------------------
+# Banco de dados (Neon / Postgres)
+# ---------------------------------------------------------------------------
+
+[tasks."db:generate"]
+description = "Gera uma migration a partir do schema Drizzle"
+run = "npx drizzle-kit generate"
+
+[tasks."db:migrate"]
+description = "Aplica as migrations pendentes no banco"
+run = "npx tsx scripts/migrate.ts"
+
+[tasks."db:push"]
+description = "Sincroniza o schema direto no banco (atalho para dev)"
+run = "npx drizzle-kit push"
+
+[tasks."db:studio"]
+description = "Abre o Drizzle Studio"
+run = "npx drizzle-kit studio"
+
+# ---------------------------------------------------------------------------
+# Dados & utilidades
+# ---------------------------------------------------------------------------
+
+[tasks."seed:words"]
+description = "Importa data/seed-words.txt para um usuário: mise run seed:words -- --email=voce@gmail.com"
+run = "npx tsx scripts/seed-words.ts"
+
+[tasks."try:generator"]
+description = "Testa o gerador de crossword offline (sem banco e sem IA)"
+run = "npx tsx scripts/try-generator.ts"
+
+[tasks."try:ai"]
+description = "Testa a geração de dicas via OpenRouter"
+run = "npx tsx scripts/try-ai.ts"
+
+[tasks."test:e2e"]
+description = "Teste ponta a ponta no banco real (cria e apaga um usuário descartável)"
+run = "npx tsx scripts/e2e-check.ts"
+
+[tasks."test:ui"]
+description = "Renderiza as telas autenticadas contra um servidor já rodando (mise run dev)"
+run = "npx tsx scripts/ui-smoke.ts"
+
+[tasks."test:auth"]
+description = "Testa cadastro, login, bloqueio e recuperação de senha via HTTP (precisa do mise run dev)"
+run = "npx tsx scripts/auth-flow-check.ts"
+
+[tasks."test:reveal"]
+description = "Testa a revelação progressiva de letras (função pura, não usa banco)"
+run = "npx tsx scripts/reveal-check.ts"
+
+[tasks."admin:create"]
+description = "Cria/promove um admin: mise run admin:create -- --email=voce@gmail.com --name=\"Seu Nome\""
+run = "npx tsx scripts/admin.ts create"
+
+[tasks."admin:password"]
+description = "Redefine a senha de uma conta: mise run admin:password -- --email=voce@gmail.com"
+run = "npx tsx scripts/admin.ts password"
+
+[tasks."admin:list"]
+description = "Lista as contas cadastradas"
+run = "npx tsx scripts/admin.ts list"
+
+[tasks."try:smtp"]
+description = "Valida a conexão SMTP e envia um e-mail de teste"
+run = "npx tsx scripts/try-smtp.ts"
+
+# ---------------------------------------------------------------------------
+# Setup completo
+# ---------------------------------------------------------------------------
+
+[tasks.setup]
+description = "Instala dependências e aplica as migrations"
+run = [
+  "npm install",
+  "npx tsx scripts/migrate.ts",
+  "echo 'Pronto. Configure AUTH_GOOGLE_ID/SECRET no .env e rode: mise run dev'",
+]
