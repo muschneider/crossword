@@ -20,12 +20,12 @@ export default async function ResetPasswordPage({
         title="Link inválido"
         subtitle={check.reason}
         footer={
-          <Link href="/forgot-password" className="text-brand-400 font-semibold hover:underline">
+          <Link href="/forgot-password" className="text-accent font-semibold hover:underline">
             Pedir um novo link
           </Link>
         }
       >
-        <p className="text-ink-300 text-sm leading-relaxed">
+        <p className="text-ink-soft text-sm leading-relaxed">
           Links de recuperação valem por {RESET_TTL_MINUTES} minutos e só podem ser usados uma vez.
           Peça um novo para continuar.
         </p>
@@ -38,11 +38,11 @@ export default async function ResetPasswordPage({
       title="Criar nova senha"
       subtitle={
         <>
-          Definindo a senha de <span className="text-ink-100 font-medium">{check.email}</span>.
+          Definindo a senha de <span className="text-ink font-medium">{check.email}</span>.
         </>
       }
       footer={
-        <Link href="/login" className="text-brand-400 font-semibold hover:underline">
+        <Link href="/login" className="text-accent font-semibold hover:underline">
           Voltar para o login
         </Link>
       }

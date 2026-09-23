@@ -22,14 +22,19 @@ import {
   users,
   words,
 } from "../src/db/schema";
+import { countGiven } from "../src/lib/crossword/difficulty";
 import {
+  applyGivens,
   checkGrid,
   completeCrossword,
   deleteCrossword,
+  entryOutcome,
   generateCrosswordForUser,
   getActiveCrossword,
   getCurrentCrossword,
+  markTranslationUsed,
 } from "../src/lib/crossword/service";
+import { isAiEnabled } from "../src/lib/env";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "../src/lib/password";
 import { parseWordList } from "../src/lib/words";
 
@@ -179,26 +184,36 @@ async function main() {
 
     /* ============================= CROSSWORD ============================= */
 
-    const first = await generateCrosswordForUser(user.id);
+    const first = await generateCrosswordForUser(user.id, "easy");
     const active = await getActiveCrossword(user.id);
     assert.ok(active, "crossword ativo não encontrado");
-    assert.equal(active.crossword.id, first.id);
+    assert.equal(active.crossword.id, first.crossword.id);
+    assert.equal(active.crossword.difficulty, "easy");
     console.log(
-      `✓ crossword gerado: ${active.crossword.width}x${active.crossword.height}, ` +
+      `✓ crossword fácil gerado: ${active.crossword.width}x${active.crossword.height}, ` +
         `${active.entries.length} palavras`,
     );
 
-    const aiClues = active.entries.filter((entry) => entry.clueSource === "ai").length;
-    const ptClues = active.entries.length - aiClues;
-    console.log(`  dicas: ${aiClues} por IA, ${ptClues} por tradução`);
-    assert.ok(aiClues > 0, "nenhuma dica de IA gerada");
-    assert.ok(ptClues > 0, "nenhuma dica de tradução");
+    const english = active.entries.filter((entry) =>
+      ["simple", "definition", "crossword"].includes(entry.clueSource),
+    );
+    console.log(
+      `  dicas: ${english.length} em inglês, ${first.fallbackClues} caíram para o português`,
+    );
+    for (const entry of english) console.log(`    ${entry.term.padEnd(18)} ${entry.clue}`);
+    if (isAiEnabled) {
+      // A fresh vocabulary sits at level 0: every clue should be a simple English one.
+      assert.ok(english.length >= active.entries.length * 0.75, "dicas em português demais");
+      assert.ok(
+        english.every((entry) => entry.clueSource === "simple"),
+        "palavra no nível 0 deveria receber a explicação simples",
+      );
+    }
 
     for (const entry of active.entries) {
       assert.ok(entry.clue.trim().length > 0, `dica vazia em ${entry.term}`);
-      if (entry.clueSource === "ai") {
-        assert.ok(entry.clue.includes("_____"), `dica de IA sem lacuna: ${entry.clue}`);
-      }
+      assert.ok(!/_{2,}/.test(entry.clue), `dica com lacuna para completar: ${entry.clue}`);
+      assert.notEqual(entry.clueSource, "sentence", "o estilo de frase com lacuna foi aposentado");
       const dr = entry.direction === "down" ? 1 : 0;
       const dc = entry.direction === "across" ? 1 : 0;
       for (let i = 0; i < entry.answer.length; i += 1) {
@@ -209,7 +224,38 @@ async function main() {
         );
       }
     }
-    console.log("✓ grid consistente com todas as entradas");
+    console.log("✓ grid consistente com todas as entradas, nenhuma dica com lacuna");
+
+    /* ------------------------ letras dadas ------------------------ */
+
+    const givens = active.crossword.givens;
+    const playable = active.crossword.grid.flat().filter((cell) => cell !== null).length;
+    assert.ok(givens.length >= playable * 0.3, `fácil com poucas letras: ${givens.length}/${playable}`);
+    for (const [row, col] of givens) {
+      assert.equal(
+        active.crossword.progress[row][col],
+        active.crossword.grid[row][col],
+        "letra dada não começou no grid",
+      );
+    }
+    const freeEntries = active.entries.filter(
+      (entry) => countGiven(entry, givens) === entry.answer.length,
+    );
+    assert.equal(freeEntries.length, 1, "o fácil deve trazer exatamente uma palavra pronta");
+    const freeEntry = freeEntries[0];
+    console.log(
+      `✓ fácil: ${givens.length}/${playable} letras dadas, palavra pronta: "${freeEntry.term}"`,
+    );
+
+    const erased = applyGivens(
+      active.crossword.grid.map((row) => row.map(() => "")),
+      active.crossword,
+    );
+    assert.ok(
+      givens.every(([row, col]) => erased[row][col] === active.crossword.grid[row][col]),
+      "letra dada pôde ser apagada",
+    );
+    console.log("✓ letras dadas são travadas: o servidor as regrava em todo progresso");
 
     const used = await db.select().from(words).where(eq(words.userId, user.id));
     const usedOnce = used.filter((word) => word.usageCount === 1);
@@ -231,6 +277,36 @@ async function main() {
     const partial = active.crossword.grid.map((row) => row.map(() => ""));
     assert.equal(checkGrid(active.crossword.grid, partial, active.entries).solved, false);
 
+    /* ---------------------- repetição espaçada ---------------------- */
+
+    // Simula o que o jogador faria: uma palavra resolvida sozinha, outra
+    // inteiramente revelada pelo botão de dica, e uma terceira em que ele olhou
+    // a tradução em português antes de acertar.
+    const scorable = active.entries.filter(
+      (entry) => entryOutcome(entry, givens) === "clean" && entry.id !== freeEntry.id,
+    );
+    assert.ok(scorable.length >= 2, "o fácil não deixou palavras pontuáveis sem ajuda");
+    const [cleanEntry, peekedEntry] = scorable;
+    const helpedEntry = active.entries.find(
+      (entry) =>
+        entry.id !== cleanEntry.id &&
+        entry.id !== peekedEntry.id &&
+        entry.id !== freeEntry.id &&
+        entry.answer.length >= 4,
+    )!;
+    await db
+      .update(crosswordEntries)
+      .set({ revealedCount: helpedEntry.answer.length })
+      .where(eq(crosswordEntries.id, helpedEntry.id));
+    await markTranslationUsed(active.crossword.id, peekedEntry.id);
+
+    const before = new Map(
+      (await db.select().from(words).where(eq(words.userId, user.id))).map((word) => [
+        word.id,
+        word,
+      ]),
+    );
+
     const solution = active.crossword.grid.map((row) => row.map((cell) => cell ?? ""));
     await db
       .update(crosswords)
@@ -241,29 +317,85 @@ async function main() {
     assert.equal(await getActiveCrossword(user.id), null, "crossword continuou ativo");
     console.log("✓ conclusão validada no servidor e slot liberado");
 
+    const scored = await db.select().from(words).where(eq(words.userId, user.id));
+    const byId = new Map(scored.map((word) => [word.id, word]));
+
+    const promoted = byId.get(cleanEntry.wordId!)!;
+    assert.equal(promoted.level, before.get(promoted.id)!.level + 1, "palavra limpa não subiu");
+    assert.equal(promoted.streak, 1, "streak não contabilizado");
+    assert.equal(promoted.correctCount, 1);
+    assert.ok(promoted.dueAt && promoted.dueAt > new Date(), "palavra limpa sem próxima revisão");
+
+    const demoted = byId.get(helpedEntry.wordId!)!;
+    assert.equal(demoted.level, 0, "palavra revelada não foi rebaixada");
+    assert.equal(demoted.missCount, 1);
+    assert.ok(
+      demoted.dueAt! <= promoted.dueAt!,
+      "palavra revelada deveria voltar antes da acertada",
+    );
+
+    const peeked = byId.get(peekedEntry.wordId!)!;
+    assert.equal(peeked.level, before.get(peeked.id)!.level, "tradução usada não pode promover");
+    assert.equal(peeked.missCount, 1, "tradução usada deveria contar como ajuda");
+
+    const free = byId.get(freeEntry.wordId!)!;
+    const freeBefore = before.get(free.id)!;
+    assert.equal(free.level, freeBefore.level, "a palavra grátis não pode ser pontuada");
+    assert.equal(free.missCount, freeBefore.missCount);
+    assert.equal(free.correctCount, freeBefore.correctCount);
+    assert.deepEqual(free.dueAt, freeBefore.dueAt, "a agenda da palavra grátis não pode mudar");
+
+    assert.ok(
+      scored.every((word) => word.usageCount === 0 || word.dueAt !== null || word.id === free.id),
+      "palavra usada ficou sem agenda de revisão",
+    );
+
+    const untouchedByScoring = await db.select().from(words).where(eq(words.userId, other.id));
+    assert.ok(
+      untouchedByScoring.every((word) => word.level === 0 && word.dueAt === null),
+      "pontuação vazou para o vocabulário de outro usuário",
+    );
+    console.log(
+      `✓ desempenho realimentado: "${promoted.term}" subiu para nível ${promoted.level}, ` +
+        `"${demoted.term}" caiu para 0, "${peeked.term}" (viu a tradução) ficou, ` +
+        `"${free.term}" (grátis) não foi pontuada`,
+    );
+
     const current = await getCurrentCrossword(user.id);
     assert.equal(current?.crossword.status, "completed");
     assert.ok(current?.entries.every((entry) => entry.solved));
     console.log("✓ crossword concluído continua visível com as respostas");
 
-    const second = await generateCrosswordForUser(user.id);
+    const second = await generateCrosswordForUser(user.id, "hard");
     const secondFull = await getActiveCrossword(user.id);
+    assert.equal(secondFull!.crossword.difficulty, "hard");
+    assert.equal(secondFull!.crossword.givens.length, 0, "o difícil não pode trazer letras");
+    assert.ok(
+      secondFull!.crossword.progress.flat().every((cell) => cell === ""),
+      "o difícil começou com letras no grid",
+    );
     const firstIds = new Set(active.entries.map((entry) => entry.wordId));
     const reused = secondFull!.entries.filter((entry) => firstIds.has(entry.wordId)).length;
+    const repeatedClues = secondFull!.entries.filter((entry) =>
+      active.entries.some((old) => old.wordId === entry.wordId && old.clue === entry.clue),
+    ).length;
     console.log(
-      `✓ segundo crossword gerado: ${secondFull!.entries.length} palavras, ${reused} repetidas`,
+      `✓ segundo crossword (difícil, grid vazio): ${secondFull!.entries.length} palavras, ` +
+        `${reused} repetidas, ${repeatedClues} com a mesma dica de antes`,
     );
 
-    await deleteCrossword(user.id, second.id);
+    await deleteCrossword(user.id, second.crossword.id);
     const leftovers = await db
       .select()
       .from(crosswordEntries)
-      .where(eq(crosswordEntries.crosswordId, second.id));
+      .where(eq(crosswordEntries.crosswordId, second.crossword.id));
     assert.equal(leftovers.length, 0, "entries órfãs após remoção");
     console.log("✓ remoção do crossword faz cascade nas entradas");
 
-    assert.ok((await generateCrosswordForUser(user.id)).id);
-    console.log("✓ novo crossword liberado após remoção");
+    const third = await generateCrosswordForUser(user.id, "medium");
+    assert.equal(third.crossword.difficulty, "medium");
+    assert.ok(third.crossword.givens.length > 0, "o médio deveria trazer algumas letras");
+    console.log(`✓ novo crossword (médio) liberado após remoção, ${third.crossword.givens.length} letras dadas`);
   } finally {
     await db.delete(users).where(eq(users.id, user.id));
     await db.delete(users).where(eq(users.id, other.id));

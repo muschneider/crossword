@@ -18,8 +18,8 @@ export function UpdateNameForm({ defaultName }: { defaultName: string }) {
   return (
     <form action={formAction} className="card space-y-4 p-6">
       <div>
-        <h2 className="text-lg font-bold tracking-tight">Seus dados</h2>
-        <p className="text-ink-400 mt-1 text-xs">O e-mail da conta não pode ser alterado.</p>
+        <h2 className="headline text-xl">Seus dados</h2>
+        <p className="text-ink-muted mt-1 text-xs">O e-mail da conta não pode ser alterado.</p>
       </div>
 
       <FormAlert state={state} />
@@ -44,8 +44,8 @@ export function ChangePasswordForm() {
   return (
     <form ref={formRef} action={formAction} className="card space-y-4 p-6">
       <div>
-        <h2 className="text-lg font-bold tracking-tight">Alterar senha</h2>
-        <p className="text-ink-400 mt-1 text-xs">
+        <h2 className="headline text-xl">Alterar senha</h2>
+        <p className="text-ink-muted mt-1 text-xs">
           Ao trocar a senha, todas as outras sessões são encerradas.
         </p>
       </div>

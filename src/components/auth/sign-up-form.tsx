@@ -47,8 +47,8 @@ export function SignUpForm() {
         {isPending ? "Criando conta…" : "Criar conta"}
       </button>
 
-      <p className="text-ink-400 text-center text-xs leading-relaxed">
-        Sua conta ficará <span className="text-ink-200 font-semibold">pendente</span> até que um
+      <p className="text-ink-muted text-center text-xs leading-relaxed">
+        Sua conta ficará <span className="text-ink font-semibold">pendente</span> até que um
         administrador aprove o acesso.
       </p>
     </form>

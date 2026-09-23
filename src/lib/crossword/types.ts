@@ -1,3 +1,5 @@
+import type { ClueTier } from "./scheduling";
+
 export type Direction = "across" | "down";
 
 export type GeneratorWord = {
@@ -6,6 +8,10 @@ export type GeneratorWord = {
   /** A-Z only, uppercase. */
   answer: string;
   translation: string;
+  /** Leitner box of the word, 0..5. */
+  level: number;
+  /** Clue style this word has earned, derived from `level`. */
+  tier: ClueTier;
 };
 
 export type PlacedWord = GeneratorWord & {

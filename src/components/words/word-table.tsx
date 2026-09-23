@@ -11,21 +11,50 @@ import {
 } from "@/app/actions/words";
 import { IDLE_STATE, type ActionState } from "@/lib/action-state";
 import { PencilIcon, TrashIcon } from "@/components/icons";
+import { LEVEL_LABELS, MAX_LEVEL } from "@/lib/crossword/scheduling";
 import type { Word } from "@/db/schema";
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
 
+/** "hoje" / "em 3 dias" — the review date only matters as a distance. */
+function relativeDue(dueAt: Date | null, usageCount: number): { text: string; due: boolean } {
+  if (usageCount === 0) return { text: "nova", due: true };
+  if (!dueAt) return { text: "agora", due: true };
+
+  const days = Math.ceil((dueAt.getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return { text: "agora", due: true };
+  if (days === 1) return { text: "amanhã", due: false };
+  if (days <= 30) return { text: `em ${days} dias`, due: false };
+  return { text: dateFormatter.format(dueAt), due: false };
+}
+
+/** Five segments filled up to the word's Leitner level. */
+function LevelMeter({ level, streak }: { level: number; streak: number }) {
+  const label = LEVEL_LABELS[Math.min(Math.max(level, 0), MAX_LEVEL)];
+  const tone = level >= 4 ? "bg-good" : level >= 2 ? "bg-accent" : "bg-cursor";
+
+  return (
+    <span
+      className="inline-flex flex-col gap-1"
+      title={`Nível ${level} de ${MAX_LEVEL} — ${label}${streak > 0 ? ` · ${streak} acerto(s) seguido(s)` : ""}`}
+    >
+      <span className="flex gap-0.5" aria-hidden>
+        {Array.from({ length: MAX_LEVEL }, (_, index) => (
+          <span
+            key={index}
+            className={`h-1.5 w-2.5 rounded-sm ${index < level ? tone : "bg-line"}`}
+          />
+        ))}
+      </span>
+      <span className="text-ink-muted text-[10px] leading-none">{label}</span>
+    </span>
+  );
+}
+
 function Feedback({ state }: { state: ActionState | null }) {
   if (!state?.message) return null;
   return (
-    <p
-      role="status"
-      className={`rounded-xl border px-4 py-2.5 text-sm ${
-        state.ok
-          ? "border-brand-500/30 bg-brand-500/10 text-brand-400"
-          : "border-red-500/30 bg-red-500/10 text-red-300"
-      }`}
-    >
+    <p role="status" className={state.ok ? "notice-good" : "notice-bad"}>
       {state.message}
     </p>
   );
@@ -169,7 +198,7 @@ export function WordTable({ items, usableRange }: { items: Word[]; usableRange: 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-ink-700/70 text-ink-400 border-b text-left text-xs tracking-wide uppercase">
+              <tr className="border-line text-ink-muted bg-paper/60 border-b text-left text-xs tracking-wide uppercase">
                 <th className="w-10 px-4 py-3">
                   <input
                     type="checkbox"
@@ -178,20 +207,27 @@ export function WordTable({ items, usableRange }: { items: Word[]; usableRange: 
                     onChange={() =>
                       setSelected(allSelected ? new Set() : new Set(items.map((item) => item.id)))
                     }
-                    className="accent-brand-500 h-4 w-4 cursor-pointer"
+                    className="accent-ink h-4 w-4 cursor-pointer"
                   />
                 </th>
                 <th className="px-2 py-3 font-semibold">Termo</th>
                 <th className="px-2 py-3 font-semibold">Tradução</th>
-                <th className="w-24 px-2 py-3 text-center font-semibold">Usos</th>
-                <th className="w-28 px-2 py-3 font-semibold">Último uso</th>
+                <th className="w-28 px-2 py-3 font-semibold" title="Quanto você já domina a palavra">
+                  Domínio
+                </th>
+                <th
+                  className="w-28 px-2 py-3 font-semibold"
+                  title="Quando a palavra volta a ter prioridade no rodízio"
+                >
+                  Revisão
+                </th>
                 <th className="w-24 px-4 py-3 text-right font-semibold">Ações</th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-ink-400 px-4 py-10 text-center text-sm">
+                  <td colSpan={6} className="text-ink-muted px-4 py-10 text-center text-sm">
                     Nenhuma palavra encontrada.
                   </td>
                 </tr>
@@ -204,7 +240,7 @@ export function WordTable({ items, usableRange }: { items: Word[]; usableRange: 
 
                 if (editing) {
                   return (
-                    <tr key={word.id} className="border-ink-800 bg-ink-800/40 border-b">
+                    <tr key={word.id} className="border-line bg-accent-soft/50 border-b">
                       <td colSpan={6} className="px-4 py-3">
                         <form
                           onSubmit={onSubmitEdit}
@@ -251,7 +287,7 @@ export function WordTable({ items, usableRange }: { items: Word[]; usableRange: 
                 return (
                   <tr
                     key={word.id}
-                    className="border-ink-800 hover:bg-ink-800/40 border-b transition-colors last:border-0"
+                    className="border-line hover:bg-sunken/50 border-b transition-colors last:border-0"
                   >
                     <td className="px-4 py-2.5">
                       <input
@@ -259,34 +295,38 @@ export function WordTable({ items, usableRange }: { items: Word[]; usableRange: 
                         aria-label={`Selecionar ${word.term}`}
                         checked={selected.has(word.id)}
                         onChange={() => toggle(word.id)}
-                        className="accent-brand-500 h-4 w-4 cursor-pointer"
+                        className="accent-ink h-4 w-4 cursor-pointer"
                       />
                     </td>
                     <td className="px-2 py-2.5">
-                      <span className="text-ink-100 font-semibold">{word.term}</span>
+                      <span className="text-ink font-semibold">{word.term}</span>
                       {unusable && (
                         <span
-                          className="badge ml-2 bg-amber-500/15 text-amber-300"
+                          className="badge bg-warn-soft text-warn ml-2"
                           title={`Só entram no grid termos com ${usableRange[0]} a ${usableRange[1]} letras (este tem ${length}).`}
                         >
                           fora do grid
                         </span>
                       )}
                     </td>
-                    <td className="text-ink-300 px-2 py-2.5">{word.translation}</td>
-                    <td className="px-2 py-2.5 text-center">
-                      <span
-                        className={`badge ${
-                          word.usageCount === 0
-                            ? "bg-ink-700 text-ink-300"
-                            : "bg-brand-500/15 text-brand-400"
-                        }`}
-                      >
-                        {word.usageCount}
-                      </span>
+                    <td className="text-ink-soft px-2 py-2.5">{word.translation}</td>
+                    <td className="px-2 py-2.5">
+                      <LevelMeter level={word.level} streak={word.streak} />
                     </td>
-                    <td className="text-ink-400 px-2 py-2.5 text-xs">
-                      {word.lastUsedAt ? dateFormatter.format(word.lastUsedAt) : "—"}
+                    <td className="px-2 py-2.5 text-xs">
+                      {(() => {
+                        const { text, due } = relativeDue(word.dueAt, word.usageCount);
+                        return (
+                          <span className={due ? "text-accent font-semibold" : "text-ink-soft"}>
+                            {text}
+                          </span>
+                        );
+                      })()}
+                      <span className="text-ink-muted mt-0.5 block text-[10px]">
+                        {word.usageCount === 0
+                          ? "nunca usada"
+                          : `${word.usageCount}× · ${word.correctCount} ok / ${word.missCount} erro`}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
@@ -302,7 +342,7 @@ export function WordTable({ items, usableRange }: { items: Word[]; usableRange: 
                           type="button"
                           onClick={() => onDelete(word)}
                           disabled={isPending}
-                          className="btn-ghost p-2 hover:bg-red-500/15 hover:text-red-300"
+                          className="btn-ghost hover:bg-bad-soft hover:text-bad p-2"
                           title="Remover"
                         >
                           <TrashIcon />

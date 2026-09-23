@@ -29,21 +29,21 @@ export function ImportPanel() {
       <button
         type="button"
         onClick={() => setOpen((previous) => !previous)}
-        className="hover:bg-ink-800/50 flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors"
+        className="hover:bg-sunken/60 flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors"
         aria-expanded={open}
       >
         <span>
           <span className="block text-sm font-bold">Importar lista de palavras</span>
-          <span className="text-ink-400 block text-xs">
+          <span className="text-ink-muted block text-xs">
             Cole quantas linhas quiser no formato <code className="font-mono">termo - tradução</code>
             . Duplicadas são descartadas automaticamente.
           </span>
         </span>
-        <span className="text-ink-400 text-lg leading-none">{open ? "−" : "+"}</span>
+        <span className="text-ink-muted text-lg leading-none">{open ? "−" : "+"}</span>
       </button>
 
       {open && (
-        <form action={formAction} className="border-ink-700/70 space-y-3 border-t p-5">
+        <form action={formAction} className="border-line space-y-3 border-t p-5">
           <div>
             <label htmlFor="content" className="label">
               Lista
@@ -57,7 +57,7 @@ export function ImportPanel() {
               placeholder={PLACEHOLDER}
               className="input font-mono text-xs leading-relaxed"
             />
-            <p className="text-ink-400 mt-2 text-xs">
+            <p className="text-ink-muted mt-2 text-xs">
               Separadores aceitos: <code className="font-mono">-</code>{" "}
               <code className="font-mono">–</code> <code className="font-mono">=</code>{" "}
               <code className="font-mono">:</code>. Marcadores de lista (
@@ -76,17 +76,10 @@ export function ImportPanel() {
           </div>
 
           {state.message && (
-            <div
-              className={`rounded-xl border px-4 py-3 text-sm ${
-                state.ok
-                  ? "border-brand-500/30 bg-brand-500/10 text-brand-400"
-                  : "border-red-500/30 bg-red-500/10 text-red-300"
-              }`}
-              role="status"
-            >
+            <div className={state.ok ? "notice-good" : "notice-bad"} role="status">
               <p className="font-semibold">{state.message}</p>
               {state.details && state.details.length > 0 && (
-                <ul className="text-ink-300 mt-2 space-y-1 text-xs">
+                <ul className="text-ink-soft mt-2 space-y-1 text-xs">
                   {state.details.map((detail, index) => (
                     <li key={index}>• {detail}</li>
                   ))}

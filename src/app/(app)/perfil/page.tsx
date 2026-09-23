@@ -9,8 +9,8 @@ export default async function ProfilePage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <header>
-        <h1 className="text-2xl font-black tracking-tight">Perfil</h1>
-        <p className="text-ink-300 mt-1 text-sm">{user.email}</p>
+        <h1 className="headline text-3xl">Perfil</h1>
+        <p className="text-ink-soft mt-1 text-sm">{user.email}</p>
       </header>
 
       <UpdateNameForm defaultName={user.name} />

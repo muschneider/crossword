@@ -29,17 +29,14 @@ export default async function LoginPage({
       footer={
         <>
           Ainda não tem conta?{" "}
-          <Link href="/signup" className="text-brand-400 font-semibold hover:underline">
+          <Link href="/signup" className="text-accent font-semibold hover:underline">
             Cadastre-se
           </Link>
         </>
       }
     >
       {params.reset === "1" && (
-        <p
-          role="status"
-          className="border-brand-500/30 bg-brand-500/10 text-brand-400 mb-4 rounded-xl border px-4 py-3 text-sm"
-        >
+        <p role="status" className="notice-good mb-4">
           Senha redefinida. Entre com a nova senha.
         </p>
       )}

@@ -14,15 +14,15 @@ export default async function AdminUsersPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight">Usuários</h1>
-          <p className="text-ink-300 mt-1 text-sm">
+          <h1 className="headline text-3xl sm:text-4xl">Usuários</h1>
+          <p className="text-ink-soft mt-1.5 text-sm">
             Toda conta criada pelo cadastro entra como{" "}
-            <span className="text-ink-100 font-semibold">pendente</span> e só acessa o app depois da
+            <span className="text-ink font-semibold">pendente</span> e só acessa o app depois da
             aprovação.
           </p>
         </div>
         {pending > 0 && (
-          <span className="badge bg-amber-500/15 px-3 py-1.5 text-amber-300">
+          <span className="badge bg-warn-soft text-warn px-3 py-1.5">
             {pending} aguardando aprovação
           </span>
         )}
@@ -30,7 +30,7 @@ export default async function AdminUsersPage() {
 
       <UserTable rows={rows} currentUserId={admin.id} />
 
-      <p className="text-ink-400 text-xs leading-relaxed">
+      <p className="text-ink-muted text-xs leading-relaxed">
         Recusar ou voltar para pendente encerra todas as sessões da pessoa na hora.
         {isEmailEnabled
           ? " Ao aprovar, enviamos um e-mail avisando."

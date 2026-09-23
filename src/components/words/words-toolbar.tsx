@@ -8,6 +8,8 @@ import { resetUsageAction } from "@/app/actions/words";
 const SORTS = [
   { value: "recent", label: "Mais recentes" },
   { value: "alpha", label: "Ordem alfabética" },
+  { value: "weakest", label: "Mais difíceis para você" },
+  { value: "strongest", label: "Mais dominadas" },
   { value: "least-used", label: "Menos usadas" },
   { value: "most-used", label: "Mais usadas" },
 ];
@@ -51,7 +53,12 @@ export function WordsToolbar() {
   };
 
   const onResetUsage = () => {
-    if (!window.confirm("Zerar os contadores de uso de todas as suas palavras?")) return;
+    const confirmed = window.confirm(
+      "Reiniciar o aprendizado de todas as palavras?\n\n" +
+        "Os níveis, as sequências de acertos e as datas de revisão voltam ao zero. " +
+        "Todas as palavras entram de novo no rodízio, com a dica mais simples.",
+    );
+    if (!confirmed) return;
     startTransition(async () => {
       await resetUsageAction();
       router.refresh();
@@ -89,9 +96,9 @@ export function WordsToolbar() {
         onClick={onResetUsage}
         disabled={isPending}
         className="btn-ghost"
-        title="Coloca todas as palavras de volta no rodízio"
+        title="Zera níveis, sequências e agenda de revisão — tudo volta ao rodízio"
       >
-        Zerar usos
+        Reiniciar aprendizado
       </button>
     </div>
   );

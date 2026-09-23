@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { words, type Word } from "@/db/schema";
 import { MAX_GRID_LENGTH, MIN_GRID_LENGTH } from "@/lib/words";
 
-export type WordSort = "recent" | "alpha" | "least-used" | "most-used";
+export type WordSort = "recent" | "alpha" | "least-used" | "most-used" | "weakest" | "strongest";
 
 export type ListWordsOptions = {
   userId: string;
@@ -32,6 +32,10 @@ function orderBy(sort: WordSort): SQL[] {
       return [asc(words.usageCount), sql`${words.lastUsedAt} asc nulls first`];
     case "most-used":
       return [desc(words.usageCount), sql`${words.lastUsedAt} desc nulls last`];
+    case "weakest":
+      return [asc(words.level), desc(words.missCount), asc(words.normalized)];
+    case "strongest":
+      return [desc(words.level), desc(words.streak), asc(words.normalized)];
     case "recent":
     default:
       return [desc(words.createdAt)];
@@ -71,9 +75,20 @@ export async function listWords(options: ListWordsOptions): Promise<ListWordsRes
 
 export type VocabularyStats = {
   total: number;
+  /** Length is inside the window the grid can take. */
   usable: number;
   neverUsed: number;
   totalUses: number;
+  /** Never practised, or past its review date — what the next puzzle draws from. */
+  due: number;
+  /** Practised and still at level 0-1: plain-English clues with a helping hand. */
+  struggling: number;
+  /** Level 2-3: clues come as dictionary definitions. */
+  learning: number;
+  /** Level 4-5: clues come as short newspaper-style clues. */
+  mastered: number;
+  /** Longest run of clean solves currently held by any word. */
+  bestStreak: number;
 };
 
 /** Aggregated in Postgres so a 10k-word vocabulary never lands in memory. */
@@ -86,6 +101,15 @@ export async function getVocabularyStats(userId: string): Promise<VocabularyStat
       )::int`,
       neverUsed: sql<number>`count(*) filter (where ${words.usageCount} = 0)::int`,
       totalUses: sql<number>`coalesce(sum(${words.usageCount}), 0)::int`,
+      due: sql<number>`count(*) filter (
+        where ${words.usageCount} = 0 or ${words.dueAt} is null or ${words.dueAt} <= now()
+      )::int`,
+      struggling: sql<number>`count(*) filter (
+        where ${words.usageCount} > 0 and ${words.level} <= 1
+      )::int`,
+      learning: sql<number>`count(*) filter (where ${words.level} between 2 and 3)::int`,
+      mastered: sql<number>`count(*) filter (where ${words.level} >= 4)::int`,
+      bestStreak: sql<number>`coalesce(max(${words.bestStreak}), 0)::int`,
     })
     .from(words)
     .where(eq(words.userId, userId));
@@ -95,6 +119,11 @@ export async function getVocabularyStats(userId: string): Promise<VocabularyStat
     usable: row?.usable ?? 0,
     neverUsed: row?.neverUsed ?? 0,
     totalUses: row?.totalUses ?? 0,
+    due: row?.due ?? 0,
+    struggling: row?.struggling ?? 0,
+    learning: row?.learning ?? 0,
+    mastered: row?.mastered ?? 0,
+    bestStreak: row?.bestStreak ?? 0,
   };
 }
 

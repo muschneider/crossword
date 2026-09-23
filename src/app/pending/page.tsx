@@ -17,28 +17,26 @@ export default async function PendingPage() {
       <div className="card w-full max-w-md p-8 text-center">
         <div
           className={`mx-auto mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl border text-2xl ${
-            rejected
-              ? "border-red-500/30 bg-red-500/10 text-red-300"
-              : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+            rejected ? "border-bad/25 bg-bad-soft text-bad" : "border-warn/25 bg-warn-soft text-warn"
           }`}
         >
           {rejected ? "✕" : "⏳"}
         </div>
 
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="headline text-3xl">
           {rejected ? "Acesso não autorizado" : "Aguardando aprovação"}
         </h1>
 
-        <p className="text-ink-300 mt-3 text-sm leading-relaxed">
+        <p className="text-ink-soft mt-3 text-sm leading-relaxed">
           {rejected ? (
             <>
-              O acesso da conta <span className="text-ink-100 font-medium">{user.email}</span> foi
+              O acesso da conta <span className="text-ink font-medium">{user.email}</span> foi
               recusado por um administrador.
             </>
           ) : (
             <>
-              Sua conta <span className="text-ink-100 font-medium">{user.email}</span> foi criada e
-              está na fila. Assim que um administrador aprovar, você entra automaticamente.
+              Sua conta <span className="text-ink font-medium">{user.email}</span> foi criada e está
+              na fila. Assim que um administrador aprovar, você entra automaticamente.
             </>
           )}
         </p>

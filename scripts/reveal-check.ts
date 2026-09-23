@@ -1,15 +1,15 @@
 /**
- * Exercises the progressive-reveal batching logic (`nextRevealCells`).
+ * Exercises the two reveal modes (`revealLetter` / `revealWord`).
  *
- * Pure function, no database: it only needs a grid and an entry.
- *   npx tsx scripts/reveal-check.ts
+ * Pure functions, no database: they only need a grid and an entry.
+ *   mise run test:reveal
  */
 import "dotenv/config";
 
 import assert from "node:assert/strict";
 
 import type { CrosswordEntry, ProgressGrid } from "../src/db/schema";
-import { REVEAL_CLICKS, nextRevealCells } from "../src/lib/crossword/service";
+import { revealLetter, revealWord } from "../src/lib/crossword/service";
 
 type Entry = Pick<CrosswordEntry, "row" | "col" | "direction" | "answer">;
 
@@ -46,7 +46,7 @@ function check(label: string, run: () => void) {
 }
 
 /* ------------------------------------------------------------------ */
-console.log("\nconvergência (across e down, comprimentos 2–15)");
+console.log("\nrevelar palavra (across e down, comprimentos 2–15)");
 
 for (const direction of ["across", "down"] as const) {
   for (let length = 2; length <= 15; length += 1) {
@@ -54,62 +54,47 @@ for (const direction of ["across", "down"] as const) {
     const entry: Entry = { row: 2, col: 3, direction, answer };
     const grid = blankGrid();
 
-    let clicks = 0;
-    let batch = nextRevealCells(entry, grid);
-    while (!batch.complete) {
-      assert.ok(batch.cells.length > 0, `${direction}/${length}: clique sem revelar nada`);
-      apply(grid, batch.cells);
-      clicks += 1;
-      assert.ok(clicks <= length, `${direction}/${length}: não converge (${clicks} cliques)`);
-      batch = nextRevealCells(entry, grid);
-    }
-    apply(grid, batch.cells);
-    clicks += 1;
-
+    apply(grid, revealWord(entry, grid));
     assert.equal(readWord(grid, entry), answer, `${direction}/${length}: palavra final errada`);
-    assert.ok(
-      clicks <= REVEAL_CLICKS,
-      `${direction}/${length}: ${clicks} cliques (esperado ≤ ${REVEAL_CLICKS})`,
-    );
+    assert.deepEqual(revealWord(entry, grid), [], `${direction}/${length}: revelou duas vezes`);
   }
 }
-check(`todas convergem para a palavra inteira em ≤ ${REVEAL_CLICKS} cliques`, () => {});
+check("uma chamada completa a palavra inteira e a seguinte não faz nada", () => {});
 
 /* ------------------------------------------------------------------ */
-console.log("\ncomportamento por clique");
+console.log("\nrevelar letra");
 
-check("primeiro clique revela um pedaço, não a palavra toda", () => {
-  const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
-  const batch = nextRevealCells(entry, blankGrid());
-  assert.equal(batch.cells.length, 3, "7 letras / 3 cliques = 3 por clique");
-  assert.equal(batch.complete, false);
-  assert.equal(batch.revealed, 3);
-  assert.equal(batch.total, 7);
-});
-
-check("revela da esquerda para a direita", () => {
+check("sem cursor, revela a primeira casa pendente", () => {
   const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
   const grid = blankGrid();
-  apply(grid, nextRevealCells(entry, grid).cells);
-  assert.equal(readWord(grid, entry), "MOR....");
+  const cells = revealLetter(entry, grid);
+  assert.deepEqual(cells, [[0, 0, "M"]]);
+});
+
+check("com cursor, revela exatamente a casa do cursor", () => {
+  const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
+  const grid = blankGrid();
+  const cells = revealLetter(entry, grid, { row: 0, col: 4 });
+  assert.deepEqual(cells, [[0, 4, "I"]]);
+});
+
+check("cursor sobre casa já correta cai na primeira pendente", () => {
+  const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
+  const grid = blankGrid();
+  grid[0][4] = "I";
+  const cells = revealLetter(entry, grid, { row: 0, col: 4 });
+  assert.deepEqual(cells, [[0, 0, "M"]]);
 });
 
 check("cliques sucessivos avançam até completar", () => {
-  const entry: Entry = { row: 1, col: 1, direction: "down", answer: "MORNING" };
+  const entry: Entry = { row: 1, col: 1, direction: "down", answer: "GOAL" };
   const grid = blankGrid();
   const seen: string[] = [];
-  for (let i = 0; i < 3; i += 1) {
-    apply(grid, nextRevealCells(entry, grid).cells);
+  for (let i = 0; i < 4; i += 1) {
+    apply(grid, revealLetter(entry, grid));
     seen.push(readWord(grid, entry));
   }
-  assert.deepEqual(seen, ["MOR....", "MORNIN.", "MORNING"]);
-});
-
-check("palavra de 2 letras não revela tudo de uma vez", () => {
-  const entry: Entry = { row: 0, col: 0, direction: "across", answer: "GO" };
-  const batch = nextRevealCells(entry, blankGrid());
-  assert.equal(batch.cells.length, 1, "mínimo de 1 letra por clique");
-  assert.equal(batch.complete, false);
+  assert.deepEqual(seen, ["G...", "GO..", "GOA.", "GOAL"]);
 });
 
 /* ------------------------------------------------------------------ */
@@ -120,24 +105,20 @@ check("letras corretas já digitadas não são re-reveladas", () => {
   const grid = blankGrid();
   grid[0][0] = "M";
   grid[0][1] = "O";
-
-  const batch = nextRevealCells(entry, grid);
+  assert.deepEqual(revealLetter(entry, grid), [[0, 2, "R"]]);
   assert.deepEqual(
-    batch.cells.map(([, col]) => col),
-    [2, 3, 4],
-    "deve pular M e O e seguir do R",
+    revealWord(entry, grid).map(([, col]) => col),
+    [2, 3, 4, 5, 6],
   );
-  assert.equal(batch.revealed, 5, "2 digitadas + 3 reveladas");
 });
 
 check("letra errada conta como pendente e é corrigida", () => {
   const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
   const grid = blankGrid();
   grid[0][0] = "X";
-
-  const batch = nextRevealCells(entry, grid);
-  assert.equal(batch.cells[0][2], "M", "a primeira revelada deve corrigir o X");
-  apply(grid, batch.cells);
+  const cells = revealLetter(entry, grid);
+  assert.deepEqual(cells, [[0, 0, "M"]]);
+  apply(grid, cells);
   assert.equal(grid[0][0], "M");
 });
 
@@ -145,34 +126,25 @@ check("palavra digitada inteira certa → nada a revelar", () => {
   const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
   const grid = blankGrid();
   for (const [i, letter] of [...entry.answer].entries()) grid[0][i] = letter;
-
-  const batch = nextRevealCells(entry, grid);
-  assert.deepEqual(batch.cells, []);
-  assert.equal(batch.complete, true);
-  assert.equal(batch.revealed, batch.total);
+  assert.deepEqual(revealWord(entry, grid), []);
+  assert.deepEqual(revealLetter(entry, grid), []);
 });
 
 check("apagar uma letra revelada volta a torná-la pendente", () => {
   const entry: Entry = { row: 0, col: 0, direction: "across", answer: "MORNING" };
   const grid = blankGrid();
-  while (!nextRevealCells(entry, grid).complete) apply(grid, nextRevealCells(entry, grid).cells);
-  apply(grid, nextRevealCells(entry, grid).cells);
+  apply(grid, revealWord(entry, grid));
   assert.equal(readWord(grid, entry), "MORNING");
 
   grid[0][4] = "";
-  const batch = nextRevealCells(entry, grid);
-  assert.equal(batch.cells.length, 1);
-  assert.deepEqual(batch.cells[0], [0, 4, "I"]);
-  assert.equal(batch.complete, true, "só faltava uma letra");
+  assert.deepEqual(revealWord(entry, grid), [[0, 4, "I"]]);
 });
 
 check("minúsculas no progresso são tratadas como corretas", () => {
   const entry: Entry = { row: 0, col: 0, direction: "across", answer: "GO" };
   const grid = blankGrid();
   grid[0][0] = "g";
-  const batch = nextRevealCells(entry, grid);
-  assert.deepEqual(batch.cells, [[0, 1, "O"]]);
-  assert.equal(batch.complete, true);
+  assert.deepEqual(revealWord(entry, grid), [[0, 1, "O"]]);
 });
 
 /* ------------------------------------------------------------------ */

@@ -12,9 +12,9 @@ import type { AdminUserRow } from "@/lib/user-repo";
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
 
 const STATUS_STYLE: Record<UserStatus, string> = {
-  pending: "bg-amber-500/15 text-amber-300",
-  approved: "bg-brand-500/15 text-brand-400",
-  rejected: "bg-red-500/15 text-red-300",
+  pending: "bg-warn-soft text-warn",
+  approved: "bg-good-soft text-good",
+  rejected: "bg-bad-soft text-bad",
 };
 
 const STATUS_LABEL: Record<UserStatus, string> = {
@@ -48,14 +48,7 @@ export function UserTable({ rows, currentUserId }: { rows: AdminUserRow[]; curre
   return (
     <div className="space-y-4">
       {state?.message && (
-        <p
-          role="status"
-          className={`rounded-xl border px-4 py-2.5 text-sm ${
-            state.ok
-              ? "border-brand-500/30 bg-brand-500/10 text-brand-400"
-              : "border-red-500/30 bg-red-500/10 text-red-300"
-          }`}
-        >
+        <p role="status" className={state.ok ? "notice-good" : "notice-bad"}>
           {state.message}
         </p>
       )}
@@ -64,7 +57,7 @@ export function UserTable({ rows, currentUserId }: { rows: AdminUserRow[]; curre
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-ink-700/70 text-ink-400 border-b text-left text-xs tracking-wide uppercase">
+              <tr className="border-line text-ink-muted bg-paper/60 border-b text-left text-xs tracking-wide uppercase">
                 <th className="px-5 py-3 font-semibold">Usuário</th>
                 <th className="w-28 px-2 py-3 font-semibold">Situação</th>
                 <th className="w-24 px-2 py-3 font-semibold">Papel</th>
@@ -80,19 +73,19 @@ export function UserTable({ rows, currentUserId }: { rows: AdminUserRow[]; curre
                 return (
                   <tr
                     key={row.id}
-                    className="border-ink-800 hover:bg-ink-800/40 border-b transition-colors last:border-0"
+                    className="border-line hover:bg-sunken/50 border-b transition-colors last:border-0"
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <span className="bg-ink-700 text-ink-200 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold">
+                        <span className="border-line-strong bg-paper text-ink flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-bold">
                           {row.name.charAt(0).toUpperCase()}
                         </span>
                         <div className="min-w-0">
                           <p className="truncate font-semibold">
                             {row.name}
-                            {isSelf && <span className="text-ink-400 ml-2 text-xs">(você)</span>}
+                            {isSelf && <span className="text-ink-muted ml-2 text-xs">(você)</span>}
                           </p>
-                          <p className="text-ink-400 truncate text-xs">{row.email}</p>
+                          <p className="text-ink-muted truncate text-xs">{row.email}</p>
                         </div>
                       </div>
                     </td>
@@ -106,23 +99,23 @@ export function UserTable({ rows, currentUserId }: { rows: AdminUserRow[]; curre
                     <td className="px-2 py-3">
                       <span
                         className={`badge ${
-                          row.role === "admin" ? "bg-sky-500/15 text-sky-300" : "bg-ink-700 text-ink-300"
+                          row.role === "admin" ? "bg-accent-soft text-accent-strong" : "bg-sunken text-ink-soft"
                         }`}
                       >
                         {row.role}
                       </span>
                     </td>
 
-                    <td className="text-ink-400 px-2 py-3 text-center text-xs">
+                    <td className="text-ink-muted px-2 py-3 text-center text-xs">
                       {row.wordCount} palavras
                       <br />
                       {row.crosswordCount} crosswords
                     </td>
 
-                    <td className="text-ink-400 px-2 py-3 text-xs">
+                    <td className="text-ink-muted px-2 py-3 text-xs">
                       {dateFormatter.format(row.createdAt)}
                       <br />
-                      <span className="text-ink-400/70">
+                      <span className="text-ink-faint">
                         {row.lastLoginAt
                           ? `último acesso ${dateFormatter.format(row.lastLoginAt)}`
                           : "nunca acessou"}
@@ -166,7 +159,7 @@ export function UserTable({ rows, currentUserId }: { rows: AdminUserRow[]; curre
                             type="button"
                             disabled={isPending}
                             onClick={() => onDelete(row)}
-                            className="btn-ghost p-2 hover:bg-red-500/15 hover:text-red-300"
+                            className="btn-ghost hover:bg-bad-soft hover:text-bad p-2"
                             title="Excluir usuário e todo o conteúdo"
                           >
                             <TrashIcon />

@@ -1,7 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { Newsreader } from "next/font/google";
 
 import { env } from "@/lib/env";
 import "./globals.css";
+
+/** A serif drawn for reading the news — used for titles only. */
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-newsreader",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -9,18 +18,18 @@ export const metadata: Metadata = {
     template: `%s · ${env.APP_NAME}`,
   },
   description:
-    "Gere palavras-cruzadas a partir do seu próprio vocabulário de inglês, com dicas em português e frases geradas por IA.",
+    "Palavras-cruzadas montadas com o seu próprio vocabulário de inglês, com dicas em inglês escritas e conferidas por IA.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#080b10",
+  themeColor: "#f6f3ec",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={newsreader.variable}>
       <body>{children}</body>
     </html>
   );

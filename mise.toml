@@ -81,7 +81,7 @@ description = "Testa o gerador de crossword offline (sem banco e sem IA)"
 run = "npx tsx scripts/try-generator.ts"
 
 [tasks."try:ai"]
-description = "Testa a geração de dicas via OpenRouter"
+description = "Roda o pipeline de dicas (escrever → filtrar → resolver às cegas → reparar) contra o OpenRouter"
 run = "npx tsx scripts/try-ai.ts"
 
 [tasks."test:e2e"]
@@ -97,8 +97,16 @@ description = "Testa cadastro, login, bloqueio e recuperação de senha via HTTP
 run = "npx tsx scripts/auth-flow-check.ts"
 
 [tasks."test:reveal"]
-description = "Testa a revelação progressiva de letras (função pura, não usa banco)"
+description = "Testa os dois modos de revelação (função pura, não usa banco)"
 run = "npx tsx scripts/reveal-check.ts"
+
+[tasks."test:scheduling"]
+description = "Testa a repetição espaçada e o rodízio, com simulação de 70 crosswords"
+run = "npx tsx scripts/scheduling-check.ts"
+
+[tasks."test:difficulty"]
+description = "Testa as letras dadas por dificuldade (fácil/médio/difícil) em 120 layouts (função pura)"
+run = "npx tsx scripts/difficulty-check.ts"
 
 [tasks."admin:create"]
 description = "Cria/promove um admin: mise run admin:create -- --email=voce@gmail.com --name=\"Seu Nome\""

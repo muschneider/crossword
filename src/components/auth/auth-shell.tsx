@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { LogoMark } from "@/components/icons";
 import { env } from "@/lib/env";
 
 /**
@@ -23,23 +24,20 @@ export function AuthShell({
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="mb-7 text-center">
-          <Link
-            href="/"
-            className="border-brand-500/30 bg-brand-500/10 text-brand-400 mb-4 inline-flex h-13 w-13 items-center justify-center rounded-2xl border p-3 text-2xl font-black"
-          >
-            ✶
+          <Link href="/" className="text-ink mb-4 inline-flex" aria-label={env.APP_NAME}>
+            <LogoMark size={48} />
           </Link>
-          <h1 className="text-2xl font-black tracking-tight">{title}</h1>
+          <h1 className="headline text-3xl">{title}</h1>
           {subtitle && (
-            <p className="text-ink-300 mt-2 text-sm leading-relaxed text-balance">{subtitle}</p>
+            <p className="text-ink-soft mt-2 text-sm leading-relaxed text-balance">{subtitle}</p>
           )}
         </div>
 
         <div className="card p-6">{children}</div>
 
-        {footer && <div className="text-ink-400 mt-5 text-center text-sm">{footer}</div>}
+        {footer && <div className="text-ink-soft mt-5 text-center text-sm">{footer}</div>}
 
-        <p className="text-ink-400 mt-8 text-center text-xs">{env.APP_NAME}</p>
+        <p className="headline text-ink-muted mt-8 text-center text-sm">{env.APP_NAME}</p>
       </div>
     </main>
   );

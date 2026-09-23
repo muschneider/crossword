@@ -22,6 +22,8 @@ const usable = parsed.words
     term: word.term,
     answer: word.answer,
     translation: word.translation,
+    level: 0,
+    tier: "simple" as const,
   }));
 
 console.log(`\n${usable.length} usable in a grid.\n`);

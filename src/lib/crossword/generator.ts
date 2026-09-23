@@ -284,6 +284,23 @@ export type GenerateOptions = {
   seed?: number;
 };
 
+/** Hard ceiling: past this, a phone can no longer show a legible cell. */
+const ABSOLUTE_MAX_SIZE = 15;
+
+/**
+ * Side length to aim for, from how many letters have to fit.
+ *
+ * A loose bound lets the builder sprawl: 12 short words would happily spread
+ * over a 17×17 board, and on a phone that means 22px cells surrounded by empty
+ * space. Sizing the box to the letters keeps puzzles compact and readable.
+ * `0.38` is the fill ratio a criss-cross layout reaches in practice.
+ */
+function targetSize(words: GeneratorWord[], longest: number): number {
+  const letters = words.reduce((sum, word) => sum + word.answer.length, 0);
+  const fromLetters = Math.ceil(Math.sqrt(letters / 0.38));
+  return Math.min(ABSOLUTE_MAX_SIZE, Math.max(longest + 1, fromLetters));
+}
+
 export function generateLayout(
   words: GeneratorWord[],
   options: GenerateOptions = {},
@@ -293,7 +310,8 @@ export function generateLayout(
   }
 
   const longest = Math.max(...words.map((word) => word.answer.length));
-  const maxSize = Math.max(options.maxSize ?? 17, longest + 1);
+  // A word longer than the ceiling still has to fit somewhere.
+  const maxSize = Math.max(options.maxSize ?? targetSize(words, longest), longest + 1);
   const attempts = options.attempts ?? 14;
   const rng = createRng(options.seed ?? randomSeed());
 
@@ -307,7 +325,9 @@ export function generateLayout(
     const density = (result.board.placements.reduce((sum, p) => sum + p.word.answer.length, 0) -
       result.intersections) / area;
 
-    const score = placed * 100 + result.intersections * 10 + density * 40;
+    // Density is weighted heavily: between two layouts that place the same
+    // words, the tighter one is strictly better to read and to play.
+    const score = placed * 100 + result.intersections * 10 + density * 120;
 
     if (score > bestScore) {
       bestScore = score;

@@ -38,8 +38,8 @@ export default async function WordsPage({
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-black tracking-tight">Suas palavras</h1>
-        <p className="text-ink-300 mt-1 text-sm">
+        <h1 className="headline text-3xl sm:text-4xl">Suas palavras</h1>
+        <p className="text-ink-soft mt-1.5 text-sm">
           Vocabulário pessoal usado para gerar os crosswords. Nada é compartilhado entre usuários.
         </p>
       </header>

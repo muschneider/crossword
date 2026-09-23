@@ -13,8 +13,16 @@ import {
 import { env } from "@/lib/env";
 import { MAX_GRID_LENGTH, MIN_GRID_LENGTH } from "@/lib/words";
 import { buildClues } from "./clues";
+import {
+  countGiven,
+  DEFAULT_DIFFICULTY,
+  pickGivens,
+  type Difficulty,
+  type GivenCell,
+} from "./difficulty";
 import { generateLayout } from "./generator";
 import { createRng, randomSeed } from "./random";
+import { applyOutcome, classifyOutcome, type OutcomeInput, type WordOutcome } from "./scheduling";
 import { resample, selectWords } from "./selector";
 import type { GeneratedLayout } from "./types";
 
@@ -99,10 +107,11 @@ function layoutScore(layout: GeneratedLayout): number {
 /**
  * Candidates for the next puzzle, already narrowed down in Postgres.
  *
- * Only grid-usable lengths are fetched, ordered by rotation priority, with a
- * `random()` tiebreaker so a vocabulary where everything is unused does not
- * always yield the same page of rows. The LIMIT keeps generation O(1) in
- * memory no matter how large the vocabulary grows.
+ * Only grid-usable lengths are fetched, ordered by the same three bands the
+ * in-memory weighting uses — never practised, then due for review, then the
+ * rest — with the weakest words first inside each band and a `random()`
+ * tiebreaker so the same page of rows is not returned every time. The LIMIT
+ * keeps generation O(1) in memory no matter how large the vocabulary grows.
  */
 async function fetchRotationCandidates(userId: string, limit: number) {
   return db
@@ -115,14 +124,58 @@ async function fetchRotationCandidates(userId: string, limit: number) {
       ),
     )
     .orderBy(
-      asc(words.usageCount),
-      sql`${words.lastUsedAt} asc nulls first`,
+      sql`case
+            when ${words.usageCount} = 0 then 0
+            when ${words.dueAt} is null or ${words.dueAt} <= now() then 1
+            else 2
+          end`,
+      asc(words.level),
       sql`random()`,
     )
     .limit(limit);
 }
 
-export async function generateCrosswordForUser(userId: string): Promise<Crossword> {
+/** English clues this learner already saw for each word, newest first (max 3). */
+async function fetchRecentClues(
+  userId: string,
+  wordIds: string[],
+): Promise<Map<string, string[]>> {
+  const recent = new Map<string, string[]>();
+  if (wordIds.length === 0) return recent;
+
+  const rows = await db
+    .select({ wordId: crosswordEntries.wordId, clue: crosswordEntries.clue })
+    .from(crosswordEntries)
+    .innerJoin(crosswords, eq(crosswords.id, crosswordEntries.crosswordId))
+    .where(
+      and(
+        eq(crosswords.userId, userId),
+        inArray(crosswordEntries.wordId, wordIds),
+        inArray(crosswordEntries.clueSource, ["simple", "definition", "crossword"]),
+      ),
+    )
+    .orderBy(desc(crosswords.createdAt))
+    .limit(wordIds.length * 4);
+
+  for (const row of rows) {
+    if (!row.wordId) continue;
+    const list = recent.get(row.wordId) ?? [];
+    if (list.length < 3) list.push(row.clue);
+    recent.set(row.wordId, list);
+  }
+  return recent;
+}
+
+export type GenerationResult = {
+  crossword: Crossword;
+  /** Clues that fell back to the Portuguese meaning because the AI had nothing. */
+  fallbackClues: number;
+};
+
+export async function generateCrosswordForUser(
+  userId: string,
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
+): Promise<GenerationResult> {
   const existing = await getActiveCrossword(userId);
   if (existing) {
     throw new Error(
@@ -161,7 +214,10 @@ export async function generateCrosswordForUser(userId: string): Promise<Crosswor
     );
   }
 
-  const clues = await buildClues(best.entries, env.CROSSWORD_AI_CLUE_RATIO, rng);
+  const usedWordIds = best.entries.map((entry) => entry.id);
+  const { clues, fallbacks } = await buildClues(best.entries, {
+    avoid: await fetchRecentClues(userId, usedWordIds),
+  });
 
   const [{ total }] = await db
     .select({ total: count() })
@@ -169,9 +225,11 @@ export async function generateCrosswordForUser(userId: string): Promise<Crosswor
     .where(eq(crosswords.userId, userId));
 
   const crosswordId = crypto.randomUUID();
-  const usedWordIds = best.entries.map((entry) => entry.id);
 
+  // The letters the difficulty hands out start on the board, already right.
+  const { cells: givens } = pickGivens(best.entries, difficulty, rng);
   const progress: ProgressGrid = best.grid.map((row) => row.map(() => ""));
+  for (const [row, col] of givens) progress[row][col] = best.grid[row][col] ?? "";
 
   const entryRows: NewCrosswordEntry[] = best.entries.map((entry) => {
     const clue = clues.get(entry.id) ?? { clue: entry.translation, clueSource: "translation" as const };
@@ -202,6 +260,8 @@ export async function generateCrosswordForUser(userId: string): Promise<Crosswor
         height: best.height,
         grid: best.grid,
         progress,
+        difficulty,
+        givens,
       }),
       db.insert(crosswordEntries).values(entryRows),
       db
@@ -221,17 +281,60 @@ export async function generateCrosswordForUser(userId: string): Promise<Crosswor
   }
 
   const [created] = await db.select().from(crosswords).where(eq(crosswords.id, crosswordId));
-  return created;
+  return { crossword: created, fallbackClues: fallbacks };
+}
+
+/**
+ * Writes the pre-filled letters back into a progress grid.
+ *
+ * Givens are locked: whatever the client sends — an erased cell, a cleared
+ * grid, a stale tab — they come back exactly as the puzzle started.
+ */
+export function applyGivens(
+  progress: ProgressGrid,
+  crossword: Pick<Crossword, "grid" | "givens">,
+): ProgressGrid {
+  for (const [row, col] of crossword.givens ?? []) {
+    const letter = crossword.grid[row]?.[col];
+    if (letter && progress[row]) progress[row][col] = letter;
+  }
+  return progress;
+}
+
+/** Every cell of the entry holds the right letter. */
+export function isEntrySolved(entry: EntryShape, progress: ProgressGrid): boolean {
+  return pendingCells(entry, progress).length === 0;
+}
+
+/**
+ * Records that the Portuguese meaning helped with this entry. Idempotent: the
+ * flag only matters once, when the puzzle is scored.
+ */
+export async function markTranslationUsed(crosswordId: string, entryId: string): Promise<void> {
+  await db
+    .update(crosswordEntries)
+    .set({ usedTranslation: true })
+    .where(
+      and(eq(crosswordEntries.id, entryId), eq(crosswordEntries.crosswordId, crosswordId)),
+    );
 }
 
 export async function saveProgress(
   userId: string,
   crosswordId: string,
   progress: ProgressGrid,
+  secondsPlayed?: number,
 ): Promise<void> {
   await db
     .update(crosswords)
-    .set({ progress, updatedAt: new Date() })
+    .set({
+      progress,
+      updatedAt: new Date(),
+      // Monotonic: a stale tab must never rewind the clock.
+      ...(secondsPlayed !== undefined
+        ? { secondsPlayed: sql`greatest(${crosswords.secondsPlayed}, ${secondsPlayed})` }
+        : {}),
+    })
     .where(
       and(
         eq(crosswords.id, crosswordId),
@@ -288,61 +391,129 @@ export function checkGrid(
   };
 }
 
-/**
- * A reveal hands out `ceil(length / REVEAL_CLICKS)` letters, so any word takes
- * about this many clicks to come out in full regardless of how long it is.
- */
-export const REVEAL_CLICKS = 3;
+/** `[row, col, letter]` triples to write into the grid. */
+export type RevealCells = [number, number, string][];
 
-export type RevealBatch = {
-  /** `[row, col, letter]` triples to write into the grid. */
-  cells: [number, number, string][];
-  /** Letters of the entry correct on the grid *after* applying `cells`. */
-  revealed: number;
-  /** Length of the entry. */
-  total: number;
-  /** `true` once every letter of the entry is on the grid. */
-  complete: boolean;
-};
+type EntryShape = Pick<CrosswordEntry, "row" | "col" | "direction" | "answer">;
 
-/**
- * Picks the next slice of letters to reveal for an entry, left to right.
- *
- * Stateless: "what is still missing" is derived from `progress` on every call,
- * so repeated calls walk the word to completion and an erased letter simply
- * becomes pending again. A cell holding a *wrong* letter counts as pending too
- * — revealing must always make visible progress.
- */
-export function nextRevealCells(
-  entry: Pick<CrosswordEntry, "row" | "col" | "direction" | "answer">,
-  progress: ProgressGrid,
-  clicks: number = REVEAL_CLICKS,
-): RevealBatch {
+/** `true` when the cell is one of the entry's own. */
+export function entryCovers(entry: EntryShape, row: number, col: number): boolean {
+  if (entry.direction === "across") {
+    return entry.row === row && col >= entry.col && col < entry.col + entry.answer.length;
+  }
+  return entry.col === col && row >= entry.row && row < entry.row + entry.answer.length;
+}
+
+/** Cells of an entry that do not yet hold the right letter. */
+function pendingCells(entry: EntryShape, progress: ProgressGrid): RevealCells {
   const dr = entry.direction === "down" ? 1 : 0;
   const dc = entry.direction === "across" ? 1 : 0;
-  const total = entry.answer.length;
 
-  const pending: [number, number, string][] = [];
-  for (let i = 0; i < total; i += 1) {
+  const pending: RevealCells = [];
+  for (let i = 0; i < entry.answer.length; i += 1) {
     const row = entry.row + dr * i;
     const col = entry.col + dc * i;
     const letter = entry.answer[i];
     if ((progress[row]?.[col] ?? "").toUpperCase() !== letter) pending.push([row, col, letter]);
   }
+  return pending;
+}
 
-  if (pending.length === 0) {
-    return { cells: [], revealed: total, total, complete: true };
-  }
+/**
+ * Reveals one cell — the one the cursor is on, if it still needs a letter, and
+ * otherwise the first cell of the entry that does.
+ *
+ * Stateless: what is missing is recomputed from `progress` every time, so an
+ * erased letter simply becomes pending again. A cell holding a *wrong* letter
+ * counts as pending too — a reveal must always make visible progress.
+ */
+export function revealLetter(
+  entry: EntryShape,
+  progress: ProgressGrid,
+  cursor?: { row: number; col: number },
+): RevealCells {
+  const pending = pendingCells(entry, progress);
+  if (pending.length === 0) return [];
 
-  const cells = pending.slice(0, Math.max(1, Math.ceil(total / Math.max(1, clicks))));
-  const revealed = total - (pending.length - cells.length);
+  const atCursor =
+    cursor && pending.find(([row, col]) => row === cursor.row && col === cursor.col);
+  return [atCursor ?? pending[0]];
+}
 
-  return { cells, revealed, total, complete: revealed === total };
+/** Reveals every letter the entry is still missing. */
+export function revealWord(entry: EntryShape, progress: ProgressGrid): RevealCells {
+  return pendingCells(entry, progress);
+}
+
+/** How one entry of a finished puzzle is scored — see `classifyOutcome`. */
+export function entryOutcome(
+  entry: Pick<
+    CrosswordEntry,
+    "row" | "col" | "direction" | "answer" | "revealedCount" | "wrongChecks" | "usedTranslation"
+  >,
+  givens: GivenCell[],
+): WordOutcome {
+  const input: OutcomeInput = {
+    length: entry.answer.length,
+    revealedCount: entry.revealedCount,
+    wrongChecks: entry.wrongChecks,
+    givenCount: countGiven(entry, givens),
+    usedTranslation: entry.usedTranslation,
+  };
+  return classifyOutcome(input);
+}
+
+/**
+ * Feeds the result of a finished puzzle back into the vocabulary.
+ *
+ * One UPDATE per word — they all move to different levels and dates — but sent
+ * as a single batch, which Neon runs as one transaction in one round trip.
+ * Entries whose word was deleted meanwhile are skipped (`word_id` is nullable
+ * exactly so history survives a deletion), and so is the free word of an easy
+ * puzzle: it was handed over, not practised, so its schedule stays as it was.
+ */
+async function applyLearningOutcomes(
+  userId: string,
+  entries: CrosswordEntry[],
+  givens: GivenCell[],
+): Promise<void> {
+  const wordIds = entries
+    .map((entry) => entry.wordId)
+    .filter((id): id is string => id !== null);
+  if (wordIds.length === 0) return;
+
+  const rows = await db
+    .select()
+    .from(words)
+    .where(and(eq(words.userId, userId), inArray(words.id, wordIds)));
+
+  const byId = new Map(rows.map((word) => [word.id, word]));
+  const now = Date.now();
+  const timestamp = new Date();
+
+  const updates = entries.flatMap((entry) => {
+    const word = entry.wordId ? byId.get(entry.wordId) : undefined;
+    if (!word) return [];
+
+    const outcome = entryOutcome(entry, givens);
+    if (outcome === "skipped") return [];
+
+    return [
+      db
+        .update(words)
+        .set({ ...applyOutcome(word, outcome, now), updatedAt: timestamp })
+        .where(eq(words.id, word.id)),
+    ];
+  });
+
+  if (updates.length === 0) return;
+  await db.batch(updates as [(typeof updates)[number], ...(typeof updates)[number][]]);
 }
 
 export async function completeCrossword(userId: string, crosswordId: string): Promise<void> {
   const current = await getCrosswordById(userId, crosswordId);
   if (!current) throw new Error("Crossword não encontrado.");
+  if (current.crossword.status === "completed") return;
 
   const check = checkGrid(current.crossword.grid, current.crossword.progress, current.entries);
   if (!check.solved) {
@@ -359,6 +530,55 @@ export async function completeCrossword(userId: string, crosswordId: string): Pr
       .set({ solved: true })
       .where(eq(crosswordEntries.crosswordId, crosswordId)),
   ]);
+
+  await applyLearningOutcomes(userId, current.entries, current.crossword.givens);
+}
+
+/**
+ * Bumps the hint counter of every entry a reveal touched.
+ *
+ * A revealed cell belongs to up to two words, and it helps both of them, so
+ * both are charged for it.
+ */
+export async function recordReveal(
+  crosswordId: string,
+  entries: CrosswordEntry[],
+  cells: RevealCells,
+): Promise<void> {
+  const charge = new Map<string, number>();
+  for (const [row, col] of cells) {
+    for (const entry of entries) {
+      if (!entryCovers(entry, row, col)) continue;
+      charge.set(entry.id, (charge.get(entry.id) ?? 0) + 1);
+    }
+  }
+
+  const updates = [...charge].map(([entryId, amount]) =>
+    db
+      .update(crosswordEntries)
+      .set({ revealedCount: sql`${crosswordEntries.revealedCount} + ${amount}` })
+      .where(and(eq(crosswordEntries.id, entryId), eq(crosswordEntries.crosswordId, crosswordId))),
+  );
+
+  if (updates.length === 0) return;
+  await db.batch(updates as [(typeof updates)[number], ...(typeof updates)[number][]]);
+}
+
+/** Marks the entries a check caught fully filled in and wrong. */
+export async function recordWrongChecks(
+  crosswordId: string,
+  entryIds: string[],
+): Promise<void> {
+  if (entryIds.length === 0) return;
+  await db
+    .update(crosswordEntries)
+    .set({ wrongChecks: sql`${crosswordEntries.wrongChecks} + 1` })
+    .where(
+      and(
+        eq(crosswordEntries.crosswordId, crosswordId),
+        inArray(crosswordEntries.id, entryIds),
+      ),
+    );
 }
 
 export async function deleteCrossword(userId: string, crosswordId: string): Promise<void> {

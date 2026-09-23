@@ -143,7 +143,7 @@ async function main() {
         profile.body.includes(email),
     );
 
-    await generateCrosswordForUser(userId);
+    await generateCrosswordForUser(userId, "easy");
 
     const puzzle = await get("/crossword", token);
     const inputs = (puzzle.body.match(/aria-label="Linha /g) ?? []).length;
@@ -155,6 +155,16 @@ async function main() {
     expect(
       "gabarito NÃO vai para o cliente enquanto está ativo",
       !puzzle.body.includes('"answer"') && !puzzle.body.includes('\\"answer\\"'),
+    );
+    // The key, not the value: `"clueSource":"translation"` is fine, a
+    // `"translation":"..."` field is a meaning sent before it was asked for.
+    expect(
+      "traduções em português NÃO vão para o cliente antes do botão PT",
+      !puzzle.body.includes('"translation":') && !puzzle.body.includes('\\"translation\\":'),
+    );
+    expect(
+      "fácil: letras dadas travadas e botão PT presentes",
+      puzzle.body.includes("(letra dada)") && puzzle.body.includes("Mostrar a tradução em português"),
     );
 
     /* ------------------------------- admin ------------------------------ */

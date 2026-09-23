@@ -12,7 +12,7 @@ export default function ForgotPasswordPage() {
       title="Recuperar senha"
       subtitle="Informe o e-mail da conta e enviaremos um link para criar uma nova senha."
       footer={
-        <Link href="/login" className="text-brand-400 font-semibold hover:underline">
+        <Link href="/login" className="text-accent font-semibold hover:underline">
           Voltar para o login
         </Link>
       }
@@ -20,15 +20,14 @@ export default function ForgotPasswordPage() {
       {isEmailEnabled ? (
         <ForgotPasswordForm />
       ) : (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+        <div className="notice-warn p-4">
           <p className="mb-2 font-semibold">Envio de e-mail não configurado</p>
-          <p className="leading-relaxed text-amber-200/80">
-            Defina <code className="font-mono text-amber-100">SMTP_HOST</code>,{" "}
-            <code className="font-mono text-amber-100">SMTP_USER</code> e{" "}
-            <code className="font-mono text-amber-100">SMTP_PASSWORD</code> no{" "}
-            <code className="font-mono text-amber-100">.env</code>. Enquanto isso, um administrador
-            pode redefinir a senha pelo comando{" "}
-            <code className="font-mono text-amber-100">mise run admin:password</code>.
+          <p>
+            Defina <code className="font-mono">SMTP_HOST</code>,{" "}
+            <code className="font-mono">SMTP_USER</code> e{" "}
+            <code className="font-mono">SMTP_PASSWORD</code> no{" "}
+            <code className="font-mono">.env</code>. Enquanto isso, um administrador pode redefinir
+            a senha pelo comando <code className="font-mono">mise run admin:password</code>.
           </p>
         </div>
       )}

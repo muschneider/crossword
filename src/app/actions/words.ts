@@ -266,17 +266,30 @@ export async function deleteWordsAction(
   }
 }
 
-/** Puts every word back in the rotation (usage counters reset to zero). */
+/**
+ * Puts every word back at square one: rotation counters, Leitner level, streaks
+ * and review dates. Clue difficulty follows the level, so this also sends every
+ * clue back to the Portuguese translation.
+ */
 export async function resetUsageAction(): Promise<ActionState> {
   try {
     const user = await requireApprovedUserOrThrow();
     await db
       .update(words)
-      .set({ usageCount: 0, lastUsedAt: null, updatedAt: new Date() })
+      .set({
+        usageCount: 0,
+        lastUsedAt: null,
+        level: 0,
+        dueAt: null,
+        streak: 0,
+        correctCount: 0,
+        missCount: 0,
+        updatedAt: new Date(),
+      })
       .where(eq(words.userId, user.id));
 
     revalidateWordPages();
-    return { ok: true, message: "Contadores de uso zerados." };
+    return { ok: true, message: "Aprendizado reiniciado: todas as palavras voltaram ao nível 0." };
   } catch (error) {
     return failure(error);
   }

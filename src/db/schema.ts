@@ -11,6 +11,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { Difficulty, GivenCell } from "@/lib/crossword/difficulty";
+
 /* -------------------------------------------------------------------------- */
 /*                              Accounts & sessions                           */
 /* -------------------------------------------------------------------------- */
@@ -106,12 +108,33 @@ export const words = pgTable(
     usageCount: integer("usage_count").notNull().default(0),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
 
+    /* ------------------------- spaced repetition ------------------------- */
+
+    /**
+     * Leitner box, 0..5. Drives both *when* the word comes back and *how hard*
+     * its clue is — always in English: 0-1 a plain explanation with a helping
+     * hand, 2-3 a dictionary definition, 4-5 a short crossword-style clue.
+     */
+    level: integer("level").notNull().default(0),
+    /** When the word becomes a priority again. `null` = never practised yet. */
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    /** Consecutive puzzles solved without a hint or a wrong check. */
+    streak: integer("streak").notNull().default(0),
+    /** Best streak ever reached — survives a demotion. */
+    bestStreak: integer("best_streak").notNull().default(0),
+    /** Puzzles where the word came out clean. */
+    correctCount: integer("correct_count").notNull().default(0),
+    /** Puzzles where the word needed a hint or was typed wrong. */
+    missCount: integer("miss_count").notNull().default(0),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("words_user_normalized_uq").on(table.userId, table.normalized),
     index("words_user_rotation_idx").on(table.userId, table.usageCount, table.lastUsedAt),
+    /** Serves the "what is due for review" ordering used by the selector. */
+    index("words_user_due_idx").on(table.userId, table.dueAt, table.level),
   ],
 );
 
@@ -143,6 +166,23 @@ export const crosswords = pgTable(
     grid: jsonb("grid").$type<SolutionGrid>().notNull(),
     progress: jsonb("progress").$type<ProgressGrid>().notNull(),
 
+    /**
+     * Chosen when the puzzle is generated. Decides how many letters start on
+     * the board; rows created before difficulty existed had none, hence `hard`.
+     */
+    difficulty: text("difficulty").$type<Difficulty>().notNull().default("hard"),
+    /**
+     * `[row, col]` of the cells that came pre-filled. Locked: the server writes
+     * them back into every progress it receives, so they cannot be erased.
+     */
+    givens: jsonb("givens")
+      .$type<GivenCell[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+
+    /** Wall-clock seconds spent on this puzzle, accumulated by the player. */
+    secondsPlayed: integer("seconds_played").notNull().default(0),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -157,7 +197,18 @@ export const crosswords = pgTable(
 );
 
 export type EntryDirection = "across" | "down";
-export type ClueSource = "translation" | "ai";
+
+/**
+ * How the clue was written, which doubles as its difficulty tier:
+ *  - `simple`:      plain English plus a helping hand (levels 0-1);
+ *  - `definition`:  English dictionary-style definition (levels 2-3);
+ *  - `crossword`:   short newspaper-style clue (levels 4-5);
+ *  - `translation`: the Portuguese meaning — only when the AI is unavailable;
+ *  - `sentence`:    legacy fill-in-the-blank clue, no longer generated.
+ *
+ * The legacy `ai` value is rewritten to `sentence` by migration 0001.
+ */
+export type ClueSource = "simple" | "definition" | "crossword" | "translation" | "sentence";
 
 export const crosswordEntries = pgTable(
   "crossword_entries",
@@ -184,6 +235,19 @@ export const crosswordEntries = pgTable(
     clueSource: text("clue_source").$type<ClueSource>().notNull(),
 
     solved: boolean("solved").notNull().default(false),
+
+    /* --------------------- how hard this one was ------------------------- */
+
+    /** Letters handed out by the hint button. Server-authoritative. */
+    revealedCount: integer("revealed_count").notNull().default(0),
+    /** Times a check caught this entry fully filled in and wrong. */
+    wrongChecks: integer("wrong_checks").notNull().default(0),
+    /**
+     * The Portuguese meaning was shown while the word was still unsolved.
+     * Server-authoritative, like the two counters above; looking it up after
+     * the word is already right costs nothing.
+     */
+    usedTranslation: boolean("used_translation").notNull().default(false),
   },
   (table) => [
     index("crossword_entries_crossword_idx").on(table.crosswordId),

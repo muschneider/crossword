@@ -1,20 +1,44 @@
 @import "tailwindcss";
 
+/*
+ * Newsprint theme: warm paper, black ink, one editorial blue, and the classic
+ * crossword highlights — yellow for the square you are on, light blue for the
+ * rest of the word.
+ *
+ * Colours are named by role, not by shade, so a component says "secondary
+ * text" (`text-ink-soft`) instead of guessing a number on a scale.
+ */
 @theme {
-  --color-ink-950: #080b10;
-  --color-ink-900: #0c1118;
-  --color-ink-850: #111823;
-  --color-ink-800: #151d2a;
-  --color-ink-700: #1e2836;
-  --color-ink-600: #2b3746;
-  --color-ink-400: #64748b;
-  --color-ink-300: #94a3b8;
-  --color-ink-200: #cbd5e1;
-  --color-ink-100: #e2e8f0;
+  /* Paper & surfaces */
+  --color-paper: #f6f3ec;
+  --color-surface: #ffffff;
+  --color-sunken: #efebe2;
+  --color-line: #e3ddd1;
+  --color-line-strong: #cbc3b3;
 
-  --color-brand-400: #34d399;
-  --color-brand-500: #10b981;
-  --color-brand-600: #059669;
+  /* Ink: every text shade passes WCAG AA on both paper and surface. */
+  --color-ink: #1c1a16;
+  --color-ink-soft: #4a453c;
+  --color-ink-muted: #6b6457;
+  --color-ink-faint: #a39b8c;
+
+  /* Editorial blue: links, focus, the selected clue. */
+  --color-accent: #1f4fd1;
+  --color-accent-strong: #173a9c;
+  --color-accent-soft: #e6edfc;
+
+  /* The board */
+  --color-word: #cfe1fb;
+  --color-cursor: #ffd43b;
+  --color-given: #ece7dc;
+
+  /* Status */
+  --color-good: #17803d;
+  --color-good-soft: #e3f3e8;
+  --color-bad: #b42318;
+  --color-bad-soft: #fdecea;
+  --color-warn: #8a4b08;
+  --color-warn-soft: #fcf0d6;
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
@@ -23,25 +47,36 @@
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+/* `inline`: the variable is set by next/font on <html>, resolve it there. */
+@theme inline {
+  --font-serif: var(--font-newsreader), "Iowan Old Style", Georgia, "Times New Roman", serif;
+}
+
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
+    /* The board is the one thing that must never be zoomed away by a stray pinch. */
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
-    @apply bg-ink-950 text-ink-100 font-sans antialiased;
-    background-image:
-      radial-gradient(60rem 40rem at 82% -12%, rgba(16, 185, 129, 0.09), transparent 62%),
-      radial-gradient(48rem 32rem at 4% 0%, rgba(56, 189, 248, 0.06), transparent 58%);
-    background-attachment: fixed;
+    @apply bg-paper text-ink font-sans antialiased;
   }
 
   ::selection {
-    @apply bg-brand-500/30;
+    background: color-mix(in oklab, var(--color-cursor) 55%, transparent);
   }
 
   *:focus-visible {
-    @apply outline-brand-400 outline-2 outline-offset-2;
+    @apply outline-accent outline-2 outline-offset-2;
+  }
+
+  /* Slim scrollbars for the clue panels. */
+  @supports (scrollbar-width: thin) {
+    .scroll-slim {
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-line-strong) transparent;
+    }
   }
 }
 
@@ -52,7 +87,22 @@
  */
 
 @utility card {
-  @apply bg-ink-900/70 border-ink-700/70 rounded-2xl border shadow-xl shadow-black/30 backdrop-blur;
+  @apply bg-surface border-line rounded-2xl border shadow-[0_1px_2px_rgb(28_26_22/0.04),0_8px_24px_-12px_rgb(28_26_22/0.12)];
+}
+
+/* Kept for the sticky bars; the card is already opaque in this theme. */
+@utility card-solid {
+  @apply card;
+}
+
+/* Page and section titles: the newspaper serif. */
+@utility headline {
+  @apply font-serif font-semibold tracking-tight;
+}
+
+/* Small uppercase label above a section or a list. */
+@utility eyebrow {
+  @apply text-ink-muted text-[11px] font-bold tracking-[0.14em] uppercase;
 }
 
 @utility btn {
@@ -62,31 +112,105 @@
 }
 
 @utility btn-primary {
-  @apply btn bg-brand-500 hover:bg-brand-400 text-ink-950;
+  @apply btn bg-ink text-paper hover:bg-ink/85;
 }
 
 @utility btn-secondary {
-  @apply btn bg-ink-700 text-ink-100 hover:bg-ink-600;
+  @apply btn bg-surface text-ink border-line-strong hover:bg-sunken border;
 }
 
 @utility btn-ghost {
-  @apply btn text-ink-300 hover:bg-ink-800 hover:text-ink-100;
+  @apply btn text-ink-soft hover:bg-sunken hover:text-ink;
 }
 
 @utility btn-danger {
-  @apply btn bg-red-500/15 text-red-300 hover:bg-red-500/25;
+  @apply btn bg-bad-soft text-bad hover:bg-bad/15;
+}
+
+@utility btn-sm {
+  @apply px-2.5 py-1.5 text-xs;
 }
 
 @utility input {
-  @apply bg-ink-950/60 border-ink-700 text-ink-100 placeholder:text-ink-400
-    focus:border-brand-500 w-full rounded-xl border px-3 py-2 text-sm transition-colors
-    focus:outline-none;
+  @apply bg-surface border-line-strong text-ink placeholder:text-ink-faint
+    focus:border-accent focus:ring-accent/15 w-full rounded-xl border px-3 py-2 text-sm
+    transition focus:ring-4 focus:outline-none;
 }
 
 @utility label {
-  @apply text-ink-300 mb-1.5 block text-xs font-semibold tracking-wide uppercase;
+  @apply text-ink-muted mb-1.5 block text-xs font-semibold tracking-wide uppercase;
 }
 
 @utility badge {
   @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+
+/* Inline messages: the result of an action, a warning, a hint. */
+@utility notice {
+  @apply rounded-xl border px-4 py-2.5 text-sm leading-relaxed;
+}
+
+@utility notice-good {
+  @apply notice border-good/25 bg-good-soft text-good;
+}
+
+@utility notice-bad {
+  @apply notice border-bad/25 bg-bad-soft text-bad;
+}
+
+@utility notice-warn {
+  @apply notice border-warn/25 bg-warn-soft text-warn;
+}
+
+@utility notice-info {
+  @apply notice border-line bg-sunken text-ink-soft;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  The board                                 */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The grid is its own query container, so a cell's contents can be sized as a
+ * fraction of the cell instead of a fraction of the viewport. That is what lets
+ * a 15-column puzzle shrink to fit a phone and still read correctly, without a
+ * single media query and without horizontal scrolling.
+ *
+ * `--cols` is set inline by the component.
+ */
+@utility board {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  /* No gap: neighbouring squares share one hairline, like a printed grid. */
+  gap: 0;
+  width: 100%;
+  /* Never blow past a comfortable square on a wide screen. */
+  max-width: calc(var(--cols) * 2.75rem);
+  margin-inline: auto;
+  touch-action: manipulation;
+}
+
+@utility board-cell {
+  @apply relative aspect-square;
+}
+
+/*
+ * Each square draws a 1px ring *outside* itself. The next square paints over
+ * the half that falls inside it, so every shared edge ends up a single crisp
+ * line and the outer edges still get one.
+ */
+@utility board-input {
+  @apply h-full w-full rounded-none border-0 text-center font-bold uppercase
+    transition-colors duration-100 focus:outline-none;
+  box-shadow: 0 0 0 1px var(--color-ink);
+  font-size: clamp(0.7rem, calc(58cqw / var(--cols)), 1.45rem);
+  line-height: 1;
+  caret-color: transparent;
+}
+
+@utility board-number {
+  @apply text-ink-soft pointer-events-none absolute top-0 left-[2px] z-10 font-semibold;
+  font-size: clamp(0.42rem, calc(24cqw / var(--cols)), 0.7rem);
+  line-height: 1.35;
 }

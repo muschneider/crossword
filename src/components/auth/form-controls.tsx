@@ -9,14 +9,7 @@
 export function FormAlert({ state }: { state: { ok: boolean; message: string } }) {
   if (!state.message) return null;
   return (
-    <p
-      role="status"
-      className={`mb-4 rounded-xl border px-4 py-3 text-sm leading-relaxed ${
-        state.ok
-          ? "border-brand-500/30 bg-brand-500/10 text-brand-400"
-          : "border-red-500/30 bg-red-500/10 text-red-300"
-      }`}
-    >
+    <p role="status" className={`mb-4 ${state.ok ? "notice-good" : "notice-bad"}`}>
       {state.message}
     </p>
   );
@@ -34,7 +27,7 @@ export function Field({
         {label}
       </label>
       <input id={id} name={id} className="input" {...props} />
-      {hint && <p className="text-ink-400 mt-1.5 text-xs">{hint}</p>}
+      {hint && <p className="text-ink-muted mt-1.5 text-xs">{hint}</p>}
     </div>
   );
 }

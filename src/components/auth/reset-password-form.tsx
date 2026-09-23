@@ -39,7 +39,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
         {isPending ? "Salvando…" : "Salvar nova senha"}
       </button>
 
-      <p className="text-ink-400 text-center text-xs leading-relaxed">
+      <p className="text-ink-muted text-center text-xs leading-relaxed">
         Por segurança, todas as sessões abertas serão encerradas.
       </p>
     </form>

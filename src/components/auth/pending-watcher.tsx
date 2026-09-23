@@ -33,7 +33,7 @@ export function PendingWatcher() {
       <button type="button" onClick={check} disabled={isChecking} className="btn-secondary">
         {isChecking ? "Verificando…" : "Verificar agora"}
       </button>
-      <p className="text-ink-400 text-xs">
+      <p className="text-ink-muted text-xs">
         {lastCheck
           ? `Última verificação às ${lastCheck.toLocaleTimeString("pt-BR")}`
           : "Verificamos automaticamente a cada 20 segundos."}

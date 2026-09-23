@@ -38,7 +38,7 @@ export function SignInForm({
             Senha
           </label>
           {emailEnabled && (
-            <Link href="/forgot-password" className="text-brand-400 text-xs hover:underline">
+            <Link href="/forgot-password" className="text-accent text-xs hover:underline">
               Esqueci minha senha
             </Link>
           )}

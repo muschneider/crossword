@@ -13,7 +13,7 @@ export function Pagination({
 }) {
   if (pageCount <= 1) {
     return (
-      <p className="text-ink-400 text-xs">
+      <p className="text-ink-muted text-xs">
         {total} palavra{total === 1 ? "" : "s"}
       </p>
     );
@@ -21,7 +21,7 @@ export function Pagination({
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <p className="text-ink-400 text-xs">
+      <p className="text-ink-muted text-xs">
         Página {page} de {pageCount} · {total} palavras
       </p>
       <div className="flex items-center gap-2">

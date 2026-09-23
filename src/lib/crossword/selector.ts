@@ -1,27 +1,10 @@
 import type { Word } from "@/db/schema";
 import { isGridUsable } from "@/lib/words";
 import { shuffle, weightedSample } from "./random";
+import { clueTierFor, rotationWeight } from "./scheduling";
 import type { GeneratorWord } from "./types";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Rotation weight.
- *
- * Words that were never used are strongly preferred; each extra use decays the
- * weight, and the weight slowly recovers as time passes. The result is that a
- * large vocabulary gets covered evenly instead of the same 10 words showing up
- * in every puzzle.
- */
-export function rotationWeight(word: Word, now = Date.now()): number {
-  const usagePenalty = 1 / Math.pow(word.usageCount + 1, 1.8);
-
-  if (!word.lastUsedAt) return usagePenalty * 4;
-
-  const days = Math.max(0, (now - word.lastUsedAt.getTime()) / DAY_MS);
-  const recency = Math.min(1 + days / 5, 4);
-  return usagePenalty * recency;
-}
+export { rotationWeight } from "./scheduling";
 
 export type Selection = {
   /** Words handed to the layout engine. */
@@ -43,7 +26,93 @@ export function toGeneratorWord(word: Word): GeneratorWord {
     term: word.term,
     answer: word.answer,
     translation: word.translation,
+    level: word.level,
+    tier: clueTierFor(word.level),
   };
+}
+
+/**
+ * How many words of 6+ letters a subset should carry.
+ *
+ * The layout engine seeds the board with its longest word and grows outward, so
+ * a subset of only short words produces a cramped grid with few crossings. Two
+ * long anchors is the sweet spot found while tuning `try:generator`.
+ */
+const LONG_WORD_TARGET = 2;
+const LONG_WORD_LENGTH = 6;
+
+type Band = "new" | "struggling" | "review";
+
+function bandOf(word: Word): Band {
+  if (word.usageCount === 0) return "new";
+  return word.level <= 1 ? "struggling" : "review";
+}
+
+/**
+ * Share of a puzzle any single band may occupy.
+ *
+ * Weighting alone is not enough. A learner with 20 words they keep getting
+ * wrong generates 20 reviews a day against 12 slots: the struggling band would
+ * swallow every puzzle and the rest of the vocabulary would never circulate
+ * again — and would therefore never climb to the harder clue tiers. The same
+ * happens on the other end with a freshly imported list, where hundreds of
+ * brand-new words would crowd out every review until the list ran out.
+ *
+ * Capping both bands at half a puzzle is the same thing Anki does with its
+ * new/review daily limits, and it is what makes a session feel like study
+ * instead of punishment. Quotas are a ceiling, never a floor: when a band
+ * cannot be filled, the leftovers take the empty seats.
+ */
+const BAND_SHARE = 0.5;
+
+/**
+ * Builds the subset actually handed to the layout engine.
+ *
+ * Walks the pool in weight order — that is the spaced-repetition ranking —
+ * honouring the per-band quotas, then fills any shortfall with what was skipped
+ * and finally guarantees a couple of long anchors for the grid.
+ */
+function buildSubset(pool: Word[], targetWords: number): Word[] {
+  const size = Math.min(targetWords, pool.length);
+  const cap = Math.max(1, Math.ceil(size * BAND_SHARE));
+  const quota: Record<Band, number> = { new: cap, struggling: cap, review: size };
+
+  const chosen: Word[] = [];
+  const skipped: Word[] = [];
+
+  for (const word of pool) {
+    if (chosen.length >= size) {
+      skipped.push(word);
+      continue;
+    }
+    const band = bandOf(word);
+    if (quota[band] > 0) {
+      quota[band] -= 1;
+      chosen.push(word);
+    } else {
+      skipped.push(word);
+    }
+  }
+
+  for (const word of skipped) {
+    if (chosen.length >= size) break;
+    chosen.push(word);
+  }
+
+  const rest = skipped.filter((word) => !chosen.includes(word));
+  const isLong = (word: Word) => word.answer.length >= LONG_WORD_LENGTH;
+  let missing = LONG_WORD_TARGET - chosen.filter(isLong).length;
+
+  // Replace from the tail of the subset: those are the lowest-priority picks.
+  for (let i = chosen.length - 1; i >= 0 && missing > 0; i -= 1) {
+    if (isLong(chosen[i])) continue;
+    const replacementIndex = rest.findIndex(isLong);
+    if (replacementIndex === -1) break;
+    chosen[i] = rest.splice(replacementIndex, 1)[0];
+    missing -= 1;
+  }
+
+  return chosen;
 }
 
 export function selectWords(words: Word[], options: SelectOptions): Selection {
@@ -60,17 +129,7 @@ export function selectWords(words: Word[], options: SelectOptions): Selection {
   const poolSize = Math.min(Math.max(options.poolSize, options.targetWords * 2), eligible.length);
 
   const pool = weightedSample(eligible, (word) => rotationWeight(word, now), poolSize, options.rng);
-
-  const target = Math.min(options.targetWords, pool.length);
-  const chosen = pool.slice(0, target);
-
-  // A long word makes a much better seed for the layout; make sure the subset
-  // has at least one if the pool can offer it.
-  const hasLong = chosen.some((word) => word.answer.length >= 6);
-  if (!hasLong) {
-    const longFromPool = pool.slice(target).find((word) => word.answer.length >= 6);
-    if (longFromPool) chosen[chosen.length - 1] = longFromPool;
-  }
+  const chosen = buildSubset(pool, options.targetWords);
 
   return {
     chosen: shuffle(chosen, options.rng).map(toGeneratorWord),
