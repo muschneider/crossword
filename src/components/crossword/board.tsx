@@ -27,8 +27,11 @@ export type BoardProps = {
 
 /**
  * The classic crossword palette: the square you are on is yellow, the rest of
- * the word light blue. Pre-filled letters sit on a grey square in a softer ink,
- * so they read as printed rather than typed.
+ * the word blue. Pre-filled letters sit on a grey square in a softer ink, so
+ * they read as printed rather than typed.
+ *
+ * The cursor square always uses its own dark ink: the yellow stays bright in
+ * the dark theme too, where the regular ink turns light and would vanish on it.
  */
 function cellClasses(state: {
   isCursor: boolean;
@@ -41,7 +44,7 @@ function cellClasses(state: {
   const ink = state.isGiven ? "text-ink-muted" : state.isCorrect ? "text-good" : "text-ink";
 
   if (state.isWrong) return "bg-bad-soft text-bad";
-  if (state.isCursor) return `bg-cursor ${ink}`;
+  if (state.isCursor) return "bg-cursor text-on-cursor";
   if (state.isHighlighted) return `bg-word ${ink}`;
   if (state.isGiven) return `bg-given ${ink}`;
   return `bg-surface ${ink} ${state.readOnly ? "" : "hover:bg-accent-soft"}`;
@@ -74,10 +77,19 @@ function BoardComponent({
           const key = `${row},${col}`;
           const number = numbers[row][col];
           const isGiven = givens[row]?.[col] ?? false;
+          const isCursor = cursor.row === row && cursor.col === col;
 
           return (
             <div key={`${row}-${col}`} className="board-cell">
-              {number > 0 && <span className="board-number">{number}</span>}
+              {number > 0 && (
+                <span
+                  className={`board-number ${
+                    isCursor && !wrong.has(key) ? "text-on-cursor" : "text-ink-soft"
+                  }`}
+                >
+                  {number}
+                </span>
+              )}
               <input
                 ref={(node) => {
                   if (node) inputs.current.set(cellId(row, col), node);
@@ -113,7 +125,7 @@ function BoardComponent({
                 }}
                 onPointerDown={() => onSelect(row, col)}
                 className={`board-input ${cellClasses({
-                  isCursor: cursor.row === row && cursor.col === col,
+                  isCursor,
                   isHighlighted: highlighted.has(key),
                   isWrong: wrong.has(key),
                   isCorrect: correct.has(key),

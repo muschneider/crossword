@@ -15,6 +15,8 @@ Cada usuário tem suas palavras e seus crosswords; nada é compartilhado.
   palavras já preenchidas
 - **Três dificuldades** ao gerar: fácil (bastante letras e uma palavra pronta),
   médio (algumas letras) e difícil (grid vazio)
+- **Tema claro de jornal** por padrão, com **tema escuro** opcional (sol/lua no
+  cabeçalho ou em Perfil → Aparência)
 - **Um crossword ativo por vez** por usuário, garantido por índice único parcial no Postgres
 
 ---
@@ -28,7 +30,7 @@ Cada usuário tem suas palavras e seus crosswords; nada é compartilhado.
 | E-mail    | Nodemailer sobre SMTP                                          |
 | Banco     | Neon Postgres via driver HTTP `@neondatabase/serverless`       |
 | ORM       | Drizzle ORM + drizzle-kit                                      |
-| Estilo    | Tailwind CSS v4, tema claro de jornal (Newsreader nos títulos) |
+| Estilo    | Tailwind CSS v4, tema claro de jornal + escuro (Newsreader nos títulos) |
 | IA        | OpenRouter (`openai/gpt-4o-mini` por padrão)                   |
 
 Tudo roda no **plano gratuito da Vercel**: sem workers, sem cron, sem filas, sem
@@ -348,6 +350,7 @@ query.
 | Recurso                 | Como funciona                                                                 |
 | ----------------------- | ----------------------------------------------------------------------------- |
 | Visual                  | Tema claro de jornal: casas brancas com linha fina, amarelo na casa atual, azul na palavra |
+| Tema escuro             | Opcional: sol/lua no cabeçalho (tablet e desktop) ou Perfil → Aparência; vale por aparelho |
 | Tradução (PT)           | Botão em cada dica, no banner e na barra do celular — vale também para palavras já preenchidas |
 | Letras dadas            | Fundo cinza e tinta mais clara; digitar por cima só avança, apagar não apaga   |
 | Barra de dica no mobile | Fixa no rodapé, reposicionada pela `VisualViewport` para ficar **acima do teclado** |
@@ -357,6 +360,12 @@ query.
 | Cronômetro              | Persistido em `crosswords.seconds_played`, pausa com a aba em segundo plano    |
 | Autosave                | Debounce de 1,2s + flush ao esconder a aba e ao sair da página                 |
 | Atalhos                 | Setas, `Enter`/`Espaço` (troca direção), `Tab` (próxima palavra), `Home`       |
+
+As cores têm nome de papel, não de tom (`text-ink-soft`, `bg-word`, `bg-cursor`), e
+o tema escuro só redefine essas mesmas variáveis sob `[data-theme="dark"]` em
+`globals.css` — nenhum componente tem variante `dark:`. A escolha fica no cookie
+`mscw_theme`, que o servidor lê para já renderizar `<html data-theme>` certo: a
+página não pisca clara antes de ficar escura, e a barra do navegador acompanha.
 
 ---
 
@@ -410,7 +419,7 @@ src/
 │   │   ├── admin/users/    # aprovação de contas
 │   │   ├── crossword/      # jogo
 │   │   ├── dashboard/      # visão geral
-│   │   ├── perfil/         # nome e troca de senha
+│   │   ├── perfil/         # nome, aparência (tema) e troca de senha
 │   │   └── words/          # CRUD + importação
 │   ├── actions/            # server actions (auth, words, crossword, admin)
 │   ├── login/ signup/      # entrada e cadastro
@@ -418,7 +427,7 @@ src/
 │   ├── reset-password/     # criação da nova senha
 │   ├── pending/            # sala de espera da aprovação
 │   └── globals.css         # tema Tailwind v4
-├── components/             # UI (player, tabelas, formulários, nav)
+├── components/             # UI (player, tabelas, formulários, nav, controles de tema)
 ├── db/                     # schema Drizzle + cliente Neon
 ├── lib/
 │   ├── crossword/
@@ -434,6 +443,7 @@ src/
 │   ├── password-reset.ts   # tokens de recuperação
 │   ├── email.ts            # envio SMTP
 │   ├── openrouter.ts       # cliente da IA (chat com resposta em JSON)
+│   ├── theme.ts            # tema claro/escuro: tipos e cookie (theme-server.ts lê no servidor)
 │   └── words.ts            # parser, normalização, deduplicação
 └── middleware.ts           # guard otimista no Edge (presença do cookie)
 ```

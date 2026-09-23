@@ -3,11 +3,13 @@ import Link from "next/link";
 import { signOutAction } from "@/app/actions/auth";
 import { AppNav } from "@/components/app-nav";
 import { LogoMark } from "@/components/icons";
+import { ThemeToggle } from "@/components/theme/theme-controls";
 import { env } from "@/lib/env";
 import { requireApprovedUser } from "@/lib/session";
+import { getTheme } from "@/lib/theme-server";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireApprovedUser();
+  const [user, theme] = await Promise.all([requireApprovedUser(), getTheme()]);
 
   return (
     <div className="min-h-dvh">
@@ -23,6 +25,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* On a phone the header is full (four nav icons for an admin); the
+                same choice lives in Perfil, one tap away on the avatar. */}
+            <ThemeToggle initial={theme} className="hidden sm:inline-flex" />
             <Link
               href="/perfil"
               title="Perfil"

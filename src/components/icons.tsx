@@ -63,7 +63,8 @@ export function LogoMark({ size = 28, ...props }: IconProps) {
   ];
   return (
     <svg viewBox="0 0 30 30" width={size} height={size} aria-hidden {...props}>
-      <rect x="0.75" y="0.75" width="28.5" height="28.5" rx="3" fill="#fff" stroke="currentColor" strokeWidth="1.5" />
+      {/* The "paper" of the tile follows the theme; the ink is currentColor. */}
+      <rect x="0.75" y="0.75" width="28.5" height="28.5" rx="3" className="fill-surface" stroke="currentColor" strokeWidth="1.5" />
       {cells.map(([col, row, filled]) =>
         filled ? (
           <rect key={`${col}-${row}`} x={1.5 + col * 9} y={1.5 + row * 9} width="9" height="9" fill="currentColor" />
@@ -230,6 +231,23 @@ export function TargetIcon(props: IconProps) {
       <circle cx="12" cy="12" r="9" />
       <circle cx="12" cy="12" r="5" />
       <circle cx="12" cy="12" r="1.5" />
+    </Stroked>
+  );
+}
+
+export function SunIcon(props: IconProps) {
+  return (
+    <Stroked {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </Stroked>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Stroked {...props}>
+      <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" />
     </Stroked>
   );
 }

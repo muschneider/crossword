@@ -826,7 +826,7 @@ export function CrosswordPlayer({ crossword }: { crossword: ClientCrossword }) {
           {/* Spacer so the last clue column is never hidden behind the bar. */}
           <div className={`${activeTranslation ? "h-28" : "h-20"} lg:hidden`} aria-hidden />
           <div
-            className="border-line bg-surface fixed inset-x-0 bottom-0 z-40 border-t shadow-[0_-6px_20px_rgb(28_26_22/0.12)] lg:hidden"
+            className="border-line bg-surface shadow-bar fixed inset-x-0 bottom-0 z-40 border-t lg:hidden"
             style={{
               transform: `translateY(-${keyboardInset}px)`,
               paddingBottom: keyboardInset > 0 ? 0 : "env(safe-area-inset-bottom)",

@@ -68,6 +68,19 @@ async function main() {
         login.body.includes("Esqueci minha senha"),
     );
 
+    const themed = async (value: string) =>
+      (await fetch(`${BASE}/login`, { headers: { cookie: `mscw_theme=${value}` } })).text();
+    expect(
+      "tema claro é o padrão (sem cookie)",
+      login.body.includes('data-theme="light"') && login.body.includes('content="#f6f3ec"'),
+    );
+    const dark = await themed("dark");
+    expect(
+      "cookie mscw_theme=dark: o servidor já entrega a página escura",
+      dark.includes('data-theme="dark"') && dark.includes('content="#141311"'),
+    );
+    expect("valor de tema inválido cai no claro", (await themed("hacker")).includes('data-theme="light"'));
+
     const signup = await get("/signup");
     expect(
       "/signup renderiza o cadastro",
